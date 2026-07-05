@@ -1,12 +1,13 @@
 import asyncio
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 from telethon import TelegramClient
 
 
@@ -15,28 +16,39 @@ ENV_PATH = BASE_DIR / ".env"
 CHANNELS_PATH = BASE_DIR / "tg-chanel-links.txt"
 EXPORTS_DIR = BASE_DIR / "exports"
 PHOTOS_DIR = EXPORTS_DIR / "photos"
-OUTPUT_PATH = EXPORTS_DIR / "tg_posts_2026-07-01_1600_to_2026-07-02_0800.jsonl"
+OUTPUT_PATH = EXPORTS_DIR / "tg_posts_2026-07-06_0140_to_2026-07-06_0240.jsonl"
 SESSION_PATH = BASE_DIR / "telegram_export"
 
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
-START_KYIV = datetime(2026, 7, 1, 16, 0, tzinfo=KYIV_TZ)
-END_KYIV = datetime(2026, 7, 2, 8, 0, tzinfo=KYIV_TZ)
+START_KYIV = datetime(2026, 7, 6, 1, 40, tzinfo=KYIV_TZ)
+END_KYIV = datetime(2026, 7, 6, 2, 40, tzinfo=KYIV_TZ)
 START_UTC = START_KYIV.astimezone(timezone.utc)
 END_UTC = END_KYIV.astimezone(timezone.utc)
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def load_config() -> tuple[int, str, str | None, str | None]:
-    config = dotenv_values(ENV_PATH)
-    api_id = config.get("api_id")
-    api_hash = config.get("api_hash")
-    phone = config.get("phone") or config.get("tg_phone")
-    bot_token = config.get("bot_token")
+    load_dotenv(ENV_PATH)
+    
+    api_id = os.environ.get("api_id") or os.environ.get("API_ID")
+    api_hash = os.environ.get("api_hash") or os.environ.get("API_HASH")
+    phone = os.environ.get("phone") or os.environ.get("tg_phone") or os.environ.get("PHONE")
+    bot_token = os.environ.get("bot_token") or os.environ.get("BOT_TOKEN")
 
     if not api_id or not api_hash:
-        raise RuntimeError(f"Missing api_id or api_hash in {ENV_PATH}")
+        raise RuntimeError(
+            f"Missing api_id or api_hash in environment or {ENV_PATH}.\n"
+            "Please specify them in your environment variables or enter them in your .env file."
+        )
 
-    return int(api_id), api_hash, phone, bot_token
+    try:
+        api_id_int = int(api_id)
+    except ValueError:
+        raise RuntimeError(
+            f"api_id must be a valid integer number (e.g., 123456). Got: {api_id!r}"
+        )
+
+    return api_id_int, api_hash, phone, bot_token
 
 
 def prompt_for_phone(phone: str | None) -> str:
@@ -141,6 +153,31 @@ async def export_channel(client: TelegramClient, channel_url: str, output_file) 
     return exported_count
 
 
+async def custom_code_callback() -> str:
+    code_path = BASE_DIR / "code.txt"
+    print(f"[info] Waiting up to 30 seconds for Telegram login code to be written into '{code_path.name}'...", flush=True)
+    
+    for _ in range(30):
+        if code_path.exists():
+            try:
+                content = code_path.read_text(encoding="utf-8").strip()
+                if content:
+                    print(f"[info] Successfully read code from {code_path.name}", flush=True)
+                    code_path.unlink(missing_ok=True)
+                    return content
+            except Exception as exc:
+                print(f"[warn] Failed to read/delete {code_path.name}: {exc}", flush=True)
+        await asyncio.sleep(1)
+
+    if sys.stdin.isatty():
+        return input("Please enter the code you received: ").strip()
+
+    raise RuntimeError(
+        f"Timed out waiting for code.txt in {BASE_DIR}.\n"
+        "Please write the Telegram verification code into that file."
+    )
+
+
 async def main() -> None:
     api_id, api_hash, phone, bot_token = load_config()
     channels = load_channels()
@@ -151,7 +188,7 @@ async def main() -> None:
     if bot_token:
         await client.start(bot_token=bot_token)
     else:
-        await client.start(phone=prompt_for_phone(phone))
+        await client.start(phone=prompt_for_phone(phone), code_callback=custom_code_callback)
 
     try:
         total_exported = 0
