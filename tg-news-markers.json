@@ -1,0 +1,866 @@
+[
+  {
+    "text": "Азов",
+    "category": "location"
+  },
+  {
+    "text": "Белая Церк",
+    "category": "location"
+  },
+  {
+    "text": "Белгород",
+    "category": "location"
+  },
+  {
+    "text": "Борисп",
+    "category": "location"
+  },
+  {
+    "text": "Бровар",
+    "category": "location"
+  },
+  {
+    "text": "Біла Церк",
+    "category": "location"
+  },
+  {
+    "text": "Білорус",
+    "category": "location"
+  },
+  {
+    "text": "Васильк",
+    "category": "location"
+  },
+  {
+    "text": "Винниц",
+    "category": "location"
+  },
+  {
+    "text": "Вишгород",
+    "category": "location"
+  },
+  {
+    "text": "Вишнев",
+    "category": "location"
+  },
+  {
+    "text": "Волин",
+    "category": "location"
+  },
+  {
+    "text": "Волын",
+    "category": "location"
+  },
+  {
+    "text": "Вінниц",
+    "category": "location"
+  },
+  {
+    "text": "Голосіїв",
+    "category": "location"
+  },
+  {
+    "text": "Дарниц",
+    "category": "location"
+  },
+  {
+    "text": "Деснян",
+    "category": "location"
+  },
+  {
+    "text": "Днепр",
+    "category": "location"
+  },
+  {
+    "text": "Днепропетров",
+    "category": "location"
+  },
+  {
+    "text": "Дніпр",
+    "category": "location"
+  },
+  {
+    "text": "Дніпропетров",
+    "category": "location"
+  },
+  {
+    "text": "Донец",
+    "category": "location"
+  },
+  {
+    "text": "Европ",
+    "category": "location"
+  },
+  {
+    "text": "Житомир",
+    "category": "location"
+  },
+  {
+    "text": "Жулян",
+    "category": "location"
+  },
+  {
+    "text": "Закарп",
+    "category": "location"
+  },
+  {
+    "text": "Запорож",
+    "category": "location"
+  },
+  {
+    "text": "Запоріж",
+    "category": "location"
+  },
+  {
+    "text": "Ивано-Франк",
+    "category": "location"
+  },
+  {
+    "text": "Изюм",
+    "category": "location"
+  },
+  {
+    "text": "Ирпен",
+    "category": "location"
+  },
+  {
+    "text": "Киев",
+    "category": "location"
+  },
+  {
+    "text": "Кировоград",
+    "category": "location"
+  },
+  {
+    "text": "Києв",
+    "category": "location"
+  },
+  {
+    "text": "Київ",
+    "category": "location"
+  },
+  {
+    "text": "Конотоп",
+    "category": "location"
+  },
+  {
+    "text": "Краматор",
+    "category": "location"
+  },
+  {
+    "text": "Кременч",
+    "category": "location"
+  },
+  {
+    "text": "Кривий",
+    "category": "location"
+  },
+  {
+    "text": "Кривой",
+    "category": "location"
+  },
+  {
+    "text": "Крим",
+    "category": "location"
+  },
+  {
+    "text": "Кропивниц",
+    "category": "location"
+  },
+  {
+    "text": "Крым",
+    "category": "location"
+  },
+  {
+    "text": "Купян",
+    "category": "location"
+  },
+  {
+    "text": "Курск",
+    "category": "location"
+  },
+  {
+    "text": "Курськ",
+    "category": "location"
+  },
+  {
+    "text": "Лубн",
+    "category": "location"
+  },
+  {
+    "text": "Луган",
+    "category": "location"
+  },
+  {
+    "text": "Луцьк",
+    "category": "location"
+  },
+  {
+    "text": "Львов",
+    "category": "location"
+  },
+  {
+    "text": "Львів",
+    "category": "location"
+  },
+  {
+    "text": "Мариуп",
+    "category": "location"
+  },
+  {
+    "text": "Мелитоп",
+    "category": "location"
+  },
+  {
+    "text": "Микола",
+    "category": "location"
+  },
+  {
+    "text": "Миргород",
+    "category": "location"
+  },
+  {
+    "text": "Николаев",
+    "category": "location"
+  },
+  {
+    "text": "Ніжин",
+    "category": "location"
+  },
+  {
+    "text": "Оболон",
+    "category": "location"
+  },
+  {
+    "text": "Обухів",
+    "category": "location"
+  },
+  {
+    "text": "Одес",
+    "category": "location"
+  },
+  {
+    "text": "Одещин",
+    "category": "location"
+  },
+  {
+    "text": "Павлоград",
+    "category": "location"
+  },
+  {
+    "text": "Переяслав",
+    "category": "location"
+  },
+  {
+    "text": "Печерськ",
+    "category": "location"
+  },
+  {
+    "text": "Подол",
+    "category": "location"
+  },
+  {
+    "text": "Поділ",
+    "category": "location"
+  },
+  {
+    "text": "Полтав",
+    "category": "location"
+  },
+  {
+    "text": "Прилу",
+    "category": "location"
+  },
+  {
+    "text": "Ровн",
+    "category": "location"
+  },
+  {
+    "text": "Росси",
+    "category": "location"
+  },
+  {
+    "text": "Ростов",
+    "category": "location"
+  },
+  {
+    "text": "Росі",
+    "category": "location"
+  },
+  {
+    "text": "Рівн",
+    "category": "location"
+  },
+  {
+    "text": "Святошин",
+    "category": "location"
+  },
+  {
+    "text": "Севастоп",
+    "category": "location"
+  },
+  {
+    "text": "Славутич",
+    "category": "location"
+  },
+  {
+    "text": "Славян",
+    "category": "location"
+  },
+  {
+    "text": "столиц",
+    "category": "location"
+  },
+  {
+    "text": "Суми",
+    "category": "location"
+  },
+  {
+    "text": "Сумск",
+    "category": "location"
+  },
+  {
+    "text": "Сумщин",
+    "category": "location"
+  },
+  {
+    "text": "Сумы",
+    "category": "location"
+  },
+  {
+    "text": "Терноп",
+    "category": "location"
+  },
+  {
+    "text": "Украин",
+    "category": "location"
+  },
+  {
+    "text": "Україн",
+    "category": "location"
+  },
+  {
+    "text": "Уман",
+    "category": "location"
+  },
+  {
+    "text": "Фастов",
+    "category": "location"
+  },
+  {
+    "text": "Фастів",
+    "category": "location"
+  },
+  {
+    "text": "Харків",
+    "category": "location"
+  },
+  {
+    "text": "Харьков",
+    "category": "location"
+  },
+  {
+    "text": "Херсон",
+    "category": "location"
+  },
+  {
+    "text": "Хмельниц",
+    "category": "location"
+  },
+  {
+    "text": "Черкас",
+    "category": "location"
+  },
+  {
+    "text": "Черкащин",
+    "category": "location"
+  },
+  {
+    "text": "Черномор",
+    "category": "location"
+  },
+  {
+    "text": "Черніг",
+    "category": "location"
+  },
+  {
+    "text": "Шевченк",
+    "category": "location"
+  },
+  {
+    "text": "Шостк",
+    "category": "location"
+  },
+  {
+    "text": "Європ",
+    "category": "location"
+  },
+  {
+    "text": "Ізюм",
+    "category": "location"
+  },
+  {
+    "text": "Ірпін",
+    "category": "location"
+  },
+  {
+    "text": "fpv",
+    "category": "weapon"
+  },
+  {
+    "text": "HIMARS",
+    "category": "weapon"
+  },
+  {
+    "text": "Shahed",
+    "category": "weapon"
+  },
+  {
+    "text": "артил",
+    "category": "weapon"
+  },
+  {
+    "text": "баллист",
+    "category": "weapon"
+  },
+  {
+    "text": "баліст",
+    "category": "weapon"
+  },
+  {
+    "text": "безпілот",
+    "category": "weapon"
+  },
+  {
+    "text": "беспилот",
+    "category": "weapon"
+  },
+  {
+    "text": "бомб",
+    "category": "weapon"
+  },
+  {
+    "text": "бпла",
+    "category": "weapon"
+  },
+  {
+    "text": "Геран",
+    "category": "weapon"
+  },
+  {
+    "text": "Гербер",
+    "category": "weapon"
+  },
+  {
+    "text": "гиперзвук",
+    "category": "weapon"
+  },
+  {
+    "text": "Град",
+    "category": "weapon"
+  },
+  {
+    "text": "гіперзвук",
+    "category": "weapon"
+  },
+  {
+    "text": "дрон",
+    "category": "weapon"
+  },
+  {
+    "text": "Искандер",
+    "category": "weapon"
+  },
+  {
+    "text": "КАБ",
+    "category": "weapon"
+  },
+  {
+    "text": "Калибр",
+    "category": "weapon"
+  },
+  {
+    "text": "Калібр",
+    "category": "weapon"
+  },
+  {
+    "text": "Крилат",
+    "category": "weapon"
+  },
+  {
+    "text": "мопед",
+    "category": "weapon"
+  },
+  {
+    "text": "Орлан",
+    "category": "weapon"
+  },
+  {
+    "text": "ПВО",
+    "category": "weapon"
+  },
+  {
+    "text": "ракет",
+    "category": "weapon"
+  },
+  {
+    "text": "С-300",
+    "category": "weapon"
+  },
+  {
+    "text": "Стрела",
+    "category": "weapon"
+  },
+  {
+    "text": "Х-101",
+    "category": "weapon"
+  },
+  {
+    "text": "Х-69",
+    "category": "weapon"
+  },
+  {
+    "text": "Циркон",
+    "category": "weapon"
+  },
+  {
+    "text": "Шахед",
+    "category": "weapon"
+  },
+  {
+    "text": "F-16",
+    "category": "equipment"
+  },
+  {
+    "text": "F-53",
+    "category": "equipment"
+  },
+  {
+    "text": "бомбардировщик",
+    "category": "equipment"
+  },
+  {
+    "text": "бомбардувальник",
+    "category": "equipment"
+  },
+  {
+    "text": "пусков",
+    "category": "equipment"
+  },
+  {
+    "text": "радар",
+    "category": "equipment"
+  },
+  {
+    "text": "РЕБ",
+    "category": "equipment"
+  },
+  {
+    "text": "РСЗО",
+    "category": "equipment"
+  },
+  {
+    "text": "стратегическ",
+    "category": "equipment"
+  },
+  {
+    "text": "стратегічн",
+    "category": "equipment"
+  },
+  {
+    "text": "Су-34",
+    "category": "equipment"
+  },
+  {
+    "text": "Ту-160",
+    "category": "equipment"
+  },
+  {
+    "text": "Ту-22",
+    "category": "equipment"
+  },
+  {
+    "text": "Ту-95",
+    "category": "equipment"
+  },
+  {
+    "text": "штурмов",
+    "category": "equipment"
+  },
+  {
+    "text": "активн",
+    "category": "other"
+  },
+  {
+    "text": "атак",
+    "category": "other"
+  },
+  {
+    "text": "баллистич",
+    "category": "other"
+  },
+  {
+    "text": "балістич",
+    "category": "other"
+  },
+  {
+    "text": "вероят",
+    "category": "other"
+  },
+  {
+    "text": "вечерн",
+    "category": "other"
+  },
+  {
+    "text": "взлет",
+    "category": "other"
+  },
+  {
+    "text": "взрыв",
+    "category": "other"
+  },
+  {
+    "text": "вибух",
+    "category": "other"
+  },
+  {
+    "text": "влучан",
+    "category": "other"
+  },
+  {
+    "text": "воздушн",
+    "category": "other"
+  },
+  {
+    "text": "возмож",
+    "category": "other"
+  },
+  {
+    "text": "высот",
+    "category": "other"
+  },
+  {
+    "text": "відбій",
+    "category": "other"
+  },
+  {
+    "text": "загроз",
+    "category": "other"
+  },
+  {
+    "text": "збит",
+    "category": "other"
+  },
+  {
+    "text": "зліт",
+    "category": "other"
+  },
+  {
+    "text": "знищен",
+    "category": "other"
+  },
+  {
+    "text": "ймовір",
+    "category": "other"
+  },
+  {
+    "text": "комбинирован",
+    "category": "other"
+  },
+  {
+    "text": "комбінован",
+    "category": "other"
+  },
+  {
+    "text": "летит",
+    "category": "other"
+  },
+  {
+    "text": "летят",
+    "category": "other"
+  },
+  {
+    "text": "маневр",
+    "category": "other"
+  },
+  {
+    "text": "масован",
+    "category": "other"
+  },
+  {
+    "text": "массирован",
+    "category": "other"
+  },
+  {
+    "text": "можлив",
+    "category": "other"
+  },
+  {
+    "text": "мониторинг",
+    "category": "other"
+  },
+  {
+    "text": "наблюд",
+    "category": "other"
+  },
+  {
+    "text": "направлен",
+    "category": "other"
+  },
+  {
+    "text": "напрям",
+    "category": "other"
+  },
+  {
+    "text": "ночн",
+    "category": "other"
+  },
+  {
+    "text": "нічн",
+    "category": "other"
+  },
+  {
+    "text": "обнаруж",
+    "category": "other"
+  },
+  {
+    "text": "обстрел",
+    "category": "other"
+  },
+  {
+    "text": "обстріл",
+    "category": "other"
+  },
+  {
+    "text": "ожида",
+    "category": "other"
+  },
+  {
+    "text": "отбой",
+    "category": "other"
+  },
+  {
+    "text": "очіку",
+    "category": "other"
+  },
+  {
+    "text": "паден",
+    "category": "other"
+  },
+  {
+    "text": "падін",
+    "category": "other"
+  },
+  {
+    "text": "перехват",
+    "category": "other"
+  },
+  {
+    "text": "повітрян",
+    "category": "other"
+  },
+  {
+    "text": "подтвержд",
+    "category": "other"
+  },
+  {
+    "text": "Пожар",
+    "category": "other"
+  },
+  {
+    "text": "пожеж",
+    "category": "other"
+  },
+  {
+    "text": "попадан",
+    "category": "other"
+  },
+  {
+    "text": "поражен",
+    "category": "other"
+  },
+  {
+    "text": "посадк",
+    "category": "other"
+  },
+  {
+    "text": "ППО",
+    "category": "other"
+  },
+  {
+    "text": "прилет",
+    "category": "other"
+  },
+  {
+    "text": "пуск",
+    "category": "other"
+  },
+  {
+    "text": "підтвердж",
+    "category": "other"
+  },
+  {
+    "text": "радиолок",
+    "category": "other"
+  },
+  {
+    "text": "ранков",
+    "category": "other"
+  },
+  {
+    "text": "реактивн",
+    "category": "other"
+  },
+  {
+    "text": "сбит",
+    "category": "other"
+  },
+  {
+    "text": "сирен",
+    "category": "other"
+  },
+  {
+    "text": "скорост",
+    "category": "other"
+  },
+  {
+    "text": "спостер",
+    "category": "other"
+  },
+  {
+    "text": "тривог",
+    "category": "other"
+  },
+  {
+    "text": "угроз",
+    "category": "other"
+  },
+  {
+    "text": "удар",
+    "category": "other"
+  },
+  {
+    "text": "уничтож",
+    "category": "other"
+  },
+  {
+    "text": "уражен",
+    "category": "other"
+  },
+  {
+    "text": "утрен",
+    "category": "other"
+  },
+  {
+    "text": "фиксирован",
+    "category": "other"
+  },
+  {
+    "text": "фіксован",
+    "category": "other"
+  },
+  {
+    "text": "швидкіст",
+    "category": "other"
+  }
+]

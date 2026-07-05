@@ -41,6 +41,38 @@ MARKER_STYLES = """
       color: #6b7280;
       font-size: 13px;
     }
+    .marker-actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .marker-export,
+    .marker-import {
+      width: 100%;
+      border: 1px solid #2563eb;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      padding: 8px 10px;
+    }
+    .marker-import {
+      border-color: #4b5563;
+      background: #ffffff;
+      color: #111827;
+    }
+    .marker-export:hover,
+    .marker-export:focus-visible {
+      background: #1d4ed8;
+    }
+    .marker-import:hover,
+    .marker-import:focus-visible {
+      background: #f3f4f6;
+    }
+    .marker-file-input {
+      display: none;
+    }
     .marker-list {
       display: flex;
       flex-direction: column;
@@ -131,6 +163,9 @@ MARKER_SCRIPT = """
       const storageKey = `tg-news-markers:${location.pathname}`;
       const markerList = document.querySelector("[data-marker-list]");
       const markerEmpty = document.querySelector("[data-marker-empty]");
+      const markerExportButton = document.querySelector("[data-marker-export]");
+      const markerImportButton = document.querySelector("[data-marker-import]");
+      const markerImportInput = document.querySelector("[data-marker-import-input]");
       const messageTextSelector = ".message-text";
       const markerCategories = {
         location: { label: "Локації", shortcut: "Q" },
@@ -334,6 +369,7 @@ MARKER_SCRIPT = """
         const counts = applyHighlights();
         markerList.textContent = "";
         markerEmpty.hidden = markers.length > 0;
+        markerExportButton.disabled = markers.length === 0;
 
         markers.forEach((marker) => {
           const category = markerCategories[marker.category];
@@ -354,6 +390,43 @@ MARKER_SCRIPT = """
           item.append(text, removeButton);
           markerList.appendChild(item);
         });
+      }
+
+      function exportMarkers() {
+        const exportedMarkers = markers.map((marker) => ({
+          text: marker.text,
+          category: marker.category,
+        }));
+        const blob = new Blob([JSON.stringify(exportedMarkers, null, 2)], {
+          type: "application/json;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "tg-news-markers.json";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function importMarkersFromFile(file) {
+        const reader = new FileReader();
+        reader.addEventListener("load", () => {
+          try {
+            const importedMarkers = JSON.parse(String(reader.result || "[]"));
+            if (!Array.isArray(importedMarkers)) {
+              throw new Error("Expected a JSON array");
+            }
+
+            markers = uniqueMarkers(importedMarkers.map(normalizeMarker));
+            saveMarkers();
+            renderMarkers();
+          } catch (error) {
+            window.alert("Не вдалося імпортувати теги. Перевірте формат JSON.");
+          }
+        });
+        reader.readAsText(file, "utf-8");
       }
 
       function isEditableTarget(target) {
@@ -380,6 +453,15 @@ MARKER_SCRIPT = """
         }
       });
 
+      markerExportButton.addEventListener("click", exportMarkers);
+      markerImportButton.addEventListener("click", () => markerImportInput.click());
+      markerImportInput.addEventListener("change", () => {
+        const [file] = markerImportInput.files || [];
+        if (file) {
+          importMarkersFromFile(file);
+        }
+        markerImportInput.value = "";
+      });
       renderMarkers();
     })();
   </script>
@@ -584,6 +666,15 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       .marker-empty {{
         color: #9ca3af;
       }}
+      .marker-import {{
+        border-color: #6b7280;
+        background: #1f2937;
+        color: #f9fafb;
+      }}
+      .marker-import:hover,
+      .marker-import:focus-visible {{
+        background: #374151;
+      }}
       .message-header a {{
         color: #93c5fd;
       }}
@@ -619,6 +710,11 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       <div class="marker-panel-title">
         <h2>Маркери</h2>
         <span class="marker-help">Виділіть текст: Q - локації, W - зброя, E - військова техніка, R - інше</span>
+      </div>
+      <div class="marker-actions">
+        <button class="marker-export" type="button" data-marker-export>Експорт тегів</button>
+        <button class="marker-import" type="button" data-marker-import>Імпорт тегів</button>
+        <input class="marker-file-input" type="file" accept="application/json,.json" data-marker-import-input>
       </div>
       <p class="marker-empty" data-marker-empty>Активних маркерів ще немає.</p>
       <div class="marker-list" data-marker-list></div>
