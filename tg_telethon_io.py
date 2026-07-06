@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
 from telethon import TelegramClient
+from telethon.sessions import SQLiteSession
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
@@ -25,6 +26,18 @@ KYIV_TZ = ZoneInfo("Europe/Kyiv")
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 _jsonl_lock = threading.Lock()
+SESSION_SQLITE_TIMEOUT_SECONDS = 30
+
+
+class TimeoutSQLiteSession(SQLiteSession):
+    def _cursor(self):
+        if self._conn is None:
+            self._conn = sqlite3.connect(
+                self.filename,
+                check_same_thread=False,
+                timeout=SESSION_SQLITE_TIMEOUT_SECONDS,
+            )
+        return self._conn.cursor()
 
 
 def load_config() -> tuple[int, str, str | None, str | None]:
@@ -85,12 +98,20 @@ def channel_folder_name(entity) -> str:
     return safe_folder_name(channel_name, fallback)
 
 
-def message_to_record(channel_url: str, message, photo_path: Path | None) -> dict:
+def message_to_record(
+    channel_url: str,
+    message,
+    photo_path: Path | None,
+    *,
+    channel_name: str | None = None,
+) -> dict:
     message_date_utc = message.date.astimezone(timezone.utc)
     replies = getattr(message, "replies", None)
+    if channel_name is None:
+        channel_name = getattr(message.chat, "username", None) or getattr(message.chat, "title", None)
 
     return {
-        "channel": getattr(message.chat, "username", None) or getattr(message.chat, "title", None),
+        "channel": channel_name,
         "channel_url": channel_url,
         "message_id": message.id,
         "date_utc": message_date_utc.isoformat(),
@@ -139,7 +160,8 @@ async def create_telegram_client(*, retries: int = 5, delay_seconds: float = 2.0
     last_exc: sqlite3.OperationalError | None = None
 
     for attempt in range(1, retries + 1):
-        client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
+        session = TimeoutSQLiteSession(str(SESSION_PATH))
+        client = TelegramClient(session, api_id, api_hash)
         try:
             if bot_token:
                 await client.start(bot_token=bot_token)

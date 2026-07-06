@@ -4,10 +4,9 @@ import argparse
 import asyncio
 import logging
 import sys
-import time
 from pathlib import Path
 
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, utils
 from telethon.errors import ChannelPrivateError, UserAlreadyParticipantError
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 from telethon.tl.types import Channel
@@ -58,9 +57,11 @@ class LiveChannelListener:
         self.bot = bot
         self.jsonl_path = jsonl_path
         self.channel_urls: dict[int, str] = {}
+        self.entities_by_chat_id: dict[int, Channel] = {}
         self.entities: list[Channel] = []
         self.joined_in_session: list[Channel] = []
         self._stopped = False
+        self._message_lock = asyncio.Lock()
 
     async def setup_channels(self, channel_urls: list[str]) -> None:
         for channel_url in channel_urls:
@@ -87,7 +88,9 @@ class LiveChannelListener:
                 logger.warning("Skip %s: join failed: %s", channel_url, exc)
                 continue
 
-            self.channel_urls[entity.id] = channel_url
+            chat_id = utils.get_peer_id(entity)
+            self.channel_urls[chat_id] = channel_url
+            self.entities_by_chat_id[chat_id] = entity
             self.entities.append(entity)
 
         if not self.entities:
@@ -98,45 +101,63 @@ class LiveChannelListener:
     def _channel_url_for(self, chat_id: int) -> str:
         return self.channel_urls.get(chat_id, f"https://t.me/c/{chat_id}")
 
-    async def handle_message(self, event: events.NewMessage.Event) -> None:
-        message = event.message
-        chat = await event.get_chat()
-        chat_id = event.chat_id
+    def _entity_for(self, chat_id: int | None) -> Channel | None:
         if chat_id is None:
-            return
+            return None
+        return self.entities_by_chat_id.get(chat_id)
 
-        channel_url = self._channel_url_for(chat_id)
-        channel_dir = PHOTOS_DIR / channel_folder_name(chat)
-        photo_path = await download_photo(message, channel_dir, channel_url)
-        record = message_to_record(channel_url, message, photo_path)
-        append_jsonl(self.jsonl_path, record)
+    async def handle_message(self, event: events.NewMessage.Event) -> None:
+        async with self._message_lock:
+            message = event.message
+            chat_id = event.chat_id
+            if chat_id is None:
+                return
 
-        caption = format_live_message(record)
-        logger.info(
-            "New post %s:%s",
-            record.get("channel"),
-            record.get("message_id"),
-        )
-
-        try:
-            if photo_path is not None:
-                absolute_path = BASE_DIR / photo_path
-                self.bot.send_photo(absolute_path, caption=caption)
+            entity = self._entity_for(chat_id)
+            channel_url = self._channel_url_for(chat_id)
+            channel_name = None
+            if entity is not None:
+                channel_name = getattr(entity, "username", None) or getattr(entity, "title", None)
+                channel_dir = PHOTOS_DIR / channel_folder_name(entity)
             else:
-                self.bot.send_message(caption)
-        except Exception:
-            logger.exception(
-                "Failed to forward %s:%s",
+                channel_dir = PHOTOS_DIR / f"channel_{chat_id}"
+
+            photo_path = await download_photo(message, channel_dir, channel_url)
+            record = message_to_record(
+                channel_url,
+                message,
+                photo_path,
+                channel_name=channel_name,
+            )
+            append_jsonl(self.jsonl_path, record)
+
+            caption = format_live_message(record)
+            logger.info(
+                "New post %s:%s",
                 record.get("channel"),
                 record.get("message_id"),
             )
-            return
 
-        time.sleep(SEND_PAUSE_SECONDS)
+            try:
+                if photo_path is not None:
+                    absolute_path = BASE_DIR / photo_path
+                    await asyncio.to_thread(self.bot.send_photo, absolute_path, caption=caption)
+                else:
+                    await asyncio.to_thread(self.bot.send_message, caption)
+            except Exception:
+                logger.exception(
+                    "Failed to forward %s:%s",
+                    record.get("channel"),
+                    record.get("message_id"),
+                )
+                return
+
+            await asyncio.sleep(SEND_PAUSE_SECONDS)
 
     async def leave_session_channels(self) -> None:
         for entity in self.joined_in_session:
-            channel_url = self.channel_urls.get(entity.id, str(entity.id))
+            chat_id = utils.get_peer_id(entity)
+            channel_url = self.channel_urls.get(chat_id, str(entity.id))
             try:
                 await self.client(LeaveChannelRequest(entity))
                 logger.info("Left %s", channel_url)
