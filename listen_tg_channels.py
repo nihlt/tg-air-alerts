@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from telethon import TelegramClient, events, utils
-from telethon.errors import ChannelPrivateError, UserAlreadyParticipantError
+from telethon.errors import ChannelPrivateError, UserAlreadyParticipantError, UserNotParticipantError
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 from telethon.tl.types import Channel
 
@@ -154,13 +154,15 @@ class LiveChannelListener:
 
             await asyncio.sleep(SEND_PAUSE_SECONDS)
 
-    async def leave_session_channels(self) -> None:
-        for entity in self.joined_in_session:
+    async def leave_listening_channels(self) -> None:
+        for entity in self.entities:
             chat_id = utils.get_peer_id(entity)
             channel_url = self.channel_urls.get(chat_id, str(entity.id))
             try:
                 await self.client(LeaveChannelRequest(entity))
                 logger.info("Left %s", channel_url)
+            except UserNotParticipantError:
+                logger.info("Not subscribed to %s", channel_url)
             except Exception as exc:
                 logger.warning("Failed to leave %s: %s", channel_url, exc)
         self.joined_in_session.clear()
@@ -169,7 +171,7 @@ class LiveChannelListener:
         if self._stopped:
             return
         self._stopped = True
-        await self.leave_session_channels()
+        await self.leave_listening_channels()
         if self.client.is_connected():
             await self.client.disconnect()
 

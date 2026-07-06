@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-import sqlite3
 import sys
 import threading
 from datetime import datetime, timezone
@@ -12,32 +10,24 @@ from zoneinfo import ZoneInfo
 
 from dotenv import dotenv_values
 from telethon import TelegramClient
-from telethon.sessions import SQLiteSession
+from telethon.sessions import StringSession
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 CHANNELS_PATH = BASE_DIR / "tg-chanel-links.txt"
 EXPORTS_DIR = BASE_DIR / "exports"
 PHOTOS_DIR = EXPORTS_DIR / "photos"
-SESSION_PATH = BASE_DIR / "telegram_export"
 LIVE_JSONL_PATH = EXPORTS_DIR / "tg_posts_live.jsonl"
+
+# Plain-text Telethon session (no SQLite, no file locking).
+SESSION_STRING_PATH = BASE_DIR / "telegram_session.txt"
+# Old SQLite session from earlier versions — migrated once, then optional to delete.
+LEGACY_SQLITE_SESSION_PATH = BASE_DIR / "telegram_export"
 
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 _jsonl_lock = threading.Lock()
-SESSION_SQLITE_TIMEOUT_SECONDS = 30
-
-
-class TimeoutSQLiteSession(SQLiteSession):
-    def _cursor(self):
-        if self._conn is None:
-            self._conn = sqlite3.connect(
-                self.filename,
-                check_same_thread=False,
-                timeout=SESSION_SQLITE_TIMEOUT_SECONDS,
-            )
-        return self._conn.cursor()
 
 
 def load_config() -> tuple[int, str, str | None, str | None]:
@@ -64,6 +54,48 @@ def prompt_for_phone(phone: str | None) -> str:
         )
 
     return phone
+
+
+def load_session_string() -> str | None:
+    if not SESSION_STRING_PATH.exists():
+        return None
+    value = SESSION_STRING_PATH.read_text(encoding="utf-8").strip()
+    return value or None
+
+
+def save_session_string(client: TelegramClient) -> None:
+    value = StringSession.save(client.session)
+    if not value:
+        raise RuntimeError("Failed to export Telethon session string")
+    SESSION_STRING_PATH.write_text(value, encoding="utf-8")
+
+
+def _legacy_sqlite_exists() -> bool:
+    return LEGACY_SQLITE_SESSION_PATH.with_suffix(".session").exists()
+
+
+async def create_telegram_client() -> TelegramClient:
+    api_id, api_hash, phone, bot_token = load_config()
+
+    session_text = load_session_string()
+    if session_text is None:
+        if _legacy_sqlite_exists():
+            raise RuntimeError(
+                "Found old telegram_export.session (SQLite — causes file locks). "
+                "Run once: python migrate_telegram_session.py"
+            )
+        session = StringSession()
+    else:
+        session = StringSession(session_text)
+
+    client = TelegramClient(session, api_id, api_hash)
+    if bot_token:
+        await client.start(bot_token=bot_token)
+    else:
+        await client.start(phone=prompt_for_phone(phone))
+
+    save_session_string(client)
+    return client
 
 
 def load_channels() -> list[str]:
@@ -153,38 +185,6 @@ def append_jsonl(path: Path, record: dict) -> None:
         with path.open("a", encoding="utf-8", newline="\n") as output_file:
             output_file.write(line)
             output_file.flush()
-
-
-async def create_telegram_client(*, retries: int = 5, delay_seconds: float = 2.0) -> TelegramClient:
-    api_id, api_hash, phone, bot_token = load_config()
-    last_exc: sqlite3.OperationalError | None = None
-
-    for attempt in range(1, retries + 1):
-        session = TimeoutSQLiteSession(str(SESSION_PATH))
-        client = TelegramClient(session, api_id, api_hash)
-        try:
-            if bot_token:
-                await client.start(bot_token=bot_token)
-            else:
-                await client.start(phone=prompt_for_phone(phone))
-            return client
-        except sqlite3.OperationalError as exc:
-            last_exc = exc
-            if "locked" not in str(exc).lower():
-                raise
-            if attempt < retries:
-                print(
-                    f"[warn] Session database locked ({attempt}/{retries}), retrying...",
-                    file=sys.stderr,
-                )
-                await asyncio.sleep(delay_seconds)
-            continue
-
-    raise RuntimeError(
-        "Telegram session database is locked. "
-        "Another listen_tg_channels.py process may still be running — "
-        "stop it with Ctrl+C in the other terminal, then retry."
-    ) from last_exc
 
 
 def ensure_export_dirs() -> None:

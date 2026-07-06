@@ -7,11 +7,47 @@ import sys
 import time
 from pathlib import Path
 
-from tg_telethon_io import EXPORTS_DIR, SESSION_PATH, ensure_export_dirs
+from tg_telethon_io import EXPORTS_DIR, LEGACY_SQLITE_SESSION_PATH, ensure_export_dirs
 
 LISTENER_LOCK_PATH = EXPORTS_DIR / "listen_tg_channels.lock"
-SESSION_JOURNAL_PATH = Path(f"{SESSION_PATH}-journal")
 LISTENER_SCRIPT_NAME = "listen_tg_channels.py"
+
+
+def find_python_listener_pids(listener_script: str = LISTENER_SCRIPT_NAME, *, exclude_pid: int | None = None) -> list[int]:
+    exclude_pid = exclude_pid if exclude_pid is not None else os.getpid()
+    pids: set[int] = set()
+
+    if sys.platform == "win32":
+        command = (
+            "Get-CimInstance Win32_Process -Filter \"name = 'python.exe'\" | "
+            f"Where-Object {{ $_.CommandLine -match '{listener_script}' }} | "
+            "ForEach-Object { $_.ProcessId }"
+        )
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.isdigit():
+                pids.add(int(line))
+    else:
+        result = subprocess.run(
+            ["ps", "-ax", "-o", "pid=,command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            if listener_script not in line:
+                continue
+            pid_text = line.strip().split(None, 1)[0]
+            if pid_text.isdigit():
+                pids.add(int(pid_text))
+
+    return sorted(pid for pid in pids if pid != exclude_pid)
 
 
 def process_exists(pid: int) -> bool:
@@ -41,42 +77,12 @@ def find_listener_pids(*, exclude_pid: int | None = None) -> list[int]:
     if lock_pid is not None:
         pids.add(lock_pid)
 
-    if sys.platform == "win32":
-        command = (
-            "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | "
-            f"Where-Object {{ $_.CommandLine -like '*{LISTENER_SCRIPT_NAME}*' }} | "
-            "Select-Object -ExpandProperty ProcessId"
-        )
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", command],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.isdigit():
-                pids.add(int(line))
-    else:
-        result = subprocess.run(
-            ["ps", "-ax", "-o", "pid=,command="],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        for line in result.stdout.splitlines():
-            if LISTENER_SCRIPT_NAME not in line:
-                continue
-            pid_text = line.strip().split(None, 1)[0]
-            if pid_text.isdigit():
-                pids.add(int(pid_text))
-
-    return sorted(pid for pid in pids if pid != exclude_pid)
+    pids.update(find_python_listener_pids(exclude_pid=exclude_pid))
+    return sorted(pids)
 
 
 def cleanup_listener_artifacts() -> None:
     LISTENER_LOCK_PATH.unlink(missing_ok=True)
-    SESSION_JOURNAL_PATH.unlink(missing_ok=True)
 
 
 def stop_listeners(*, wait_seconds: float = 2.0) -> list[int]:
@@ -112,7 +118,7 @@ def acquire_listener_lock() -> None:
     if lock_pid is not None and process_exists(lock_pid) and lock_pid != os.getpid():
         raise RuntimeError(
             f"Another listener is already running (pid {lock_pid}). "
-            "Stop it with Ctrl+C or run stop_listener.py first."
+            "Run cleanup_listener.bat first."
         )
     if LISTENER_LOCK_PATH.exists():
         LISTENER_LOCK_PATH.unlink(missing_ok=True)
