@@ -128,6 +128,29 @@ def render_photo(post: dict[str, Any]) -> str:
     return f'<img class="message-photo" src="{escaped_path}" alt="Telegram post photo">'
 
 
+DISTRICT_KEYWORDS = {
+    "Голосіївський": ["голосіїв", "голосєєв", "теремк", "вднг", "деміїв", "пирогів", "феофан"],
+    "Дарницький": ["дарниц", "позняк", "осок", "харківськ", "бортнич", "червоний хутір"],
+    "Деснянський": ["деснян", "троєщин", "лісов", "биківн"],
+    "Дніпровський": ["дніпров", "воскресен", "радужн", "русанів", "березняк", "соцміс", "лівобереж"],
+    "Оболонський": ["оболон", "мінськ", "пріорк", "пуща-водиц", "петрівк", "почайн", "вишгородськ"],
+    "Печерський": ["печер", "липк", "арсенал", "хрещатик", "олімпійськ", "либедськ", "либидськ"],
+    "Подільський": ["поділ", "виноград", "куренів", "мостицьк", "рибальськ"],
+    "Святошинський": ["святошин", "борщагів", "академ", "новобілич", "білич", "житомирськ"],
+    "Солом'янський": ["солом", "відрадн", "шуляв", "караваєв", "жулян", "протасів", "кпi"],
+    "Шевченківський": ["шевченк", "лук'ян", "сирец", "нивк", "татарк", "дорогожич"]
+}
+
+
+def get_post_districts(text: str) -> list[str]:
+    text_lower = text.lower()
+    matched = []
+    for district, keywords in DISTRICT_KEYWORDS.items():
+        if any(keyword in text_lower for keyword in keywords):
+            matched.append(district)
+    return matched
+
+
 def get_categories_and_badges(text: str) -> tuple[list[str], str]:
     categories = []
     badges = []
@@ -157,7 +180,18 @@ def render_post(post: dict[str, Any]) -> str:
     photo_html = render_photo(post)
     
     categories, badges_markup = get_categories_and_badges(str(post.get("text") or ""))
-    badges_html = f'<div class="message-badges">{badges_markup}</div>' if badges_markup else ""
+    
+    districts = get_post_districts(str(post.get("text") or ""))
+    district_badges = [f'<span class="badge badge-district">📍 {escape(d)}</span>' for d in districts]
+    
+    all_badges = badges_markup
+    if district_badges:
+        if all_badges:
+            all_badges += " " + " ".join(district_badges)
+        else:
+            all_badges = " ".join(district_badges)
+            
+    badges_html = f'<div class="message-badges">{all_badges}</div>' if all_badges else ""
     
     views_count = post.get("views")
     views = escape(str(views_count)) if views_count is not None else "0"
@@ -187,7 +221,7 @@ def render_post(post: dict[str, Any]) -> str:
     hash_svg = '<svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></svg>'
     external_link_svg = '<svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>'
 
-    return f"""<article class="message" data-date="{date_iso}" data-channel="{channel}" data-categories="{','.join(categories)}">
+    return f"""<article class="message" data-date="{date_iso}" data-channel="{channel}" data-categories="{','.join(categories)}" data-districts="{','.join(districts)}">
   <header class="message-header">
     <div class="channel-info">
       <a href="{channel_url}" target="_blank" rel="noopener noreferrer" class="channel-link">
@@ -225,12 +259,19 @@ def render_html(posts: list[dict[str, Any]]) -> str:
     # Gather statistics for dynamic sidebars
     channel_stats = {}
     date_stats = {}
+    district_stats = {}
     
     posts_by_date = {}
     for post in posts:
         chan = post.get("channel") or "unknown"
         channel_stats[chan] = channel_stats.get(chan, 0) + 1
         
+        # District stats
+        text = str(post.get("text") or "")
+        districts = get_post_districts(text)
+        for dist in districts:
+            district_stats[dist] = district_stats.get(dist, 0) + 1
+            
         date_value = post.get("date_kyiv") or post.get("date_utc") or ""
         try:
             parsed_date = datetime.fromisoformat(date_value)
@@ -248,6 +289,8 @@ def render_html(posts: list[dict[str, Any]]) -> str:
     sorted_channels = sorted(channel_stats.items(), key=lambda x: x[0].lower())
     # Sorted dates for filters
     sorted_dates_filter = sorted(date_stats.keys())
+    # Sorted districts
+    sorted_districts = sorted(district_stats.items(), key=lambda x: x[0])
 
     # Build Sidebar Filters HTML
     # Reset filters button
@@ -270,6 +313,17 @@ def render_html(posts: list[dict[str, Any]]) -> str:
             f"""<label class="checkbox-label">
               <input type="checkbox" data-channel="{escape(chan)}">
               <span class="channel-lbl-name">{escape(chan)}</span>
+              <span class="count">{count}</span>
+            </label>"""
+        )
+
+    # District filter checkboxes
+    district_options_html = []
+    for dist, count in sorted_districts:
+        district_options_html.append(
+            f"""<label class="checkbox-label">
+              <input type="checkbox" data-district="{escape(dist)}">
+              <span class="district-lbl-name">📍 {escape(dist)}</span>
               <span class="count">{count}</span>
             </label>"""
         )
@@ -685,6 +739,12 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       border: 1px solid rgba(234, 179, 8, 0.2);
     }
     
+    .badge-district {
+      background-color: rgba(37, 99, 235, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(37, 99, 235, 0.2);
+    }
+    
     .message-text {
       font-size: 15px;
       line-height: 1.6;
@@ -805,6 +865,13 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       </div>
       
       <div class="sidebar-section">
+        <span class="section-title">📍 Райони Києва</span>
+        <div class="filter-group" id="district-filters">
+          {DISTRICT_OPTIONS}
+        </div>
+      </div>
+      
+      <div class="sidebar-section">
         <span class="section-title">📢 Фільтр по каналах</span>
         <div class="filter-group" id="channel-filters">
           {CHANNEL_OPTIONS}
@@ -835,6 +902,7 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       const dateButtons = document.querySelectorAll('#date-filters .filter-btn');
       const channelCheckboxes = document.querySelectorAll('#channel-filters input[type="checkbox"]');
       const categoryButtons = document.querySelectorAll('#category-filters .filter-btn');
+      const districtCheckboxes = document.querySelectorAll('#district-filters input[type="checkbox"]');
       const posts = document.querySelectorAll('.message');
       const dateGroups = document.querySelectorAll('.date-group');
       const totalCountEl = document.getElementById('visible-count');
@@ -855,6 +923,14 @@ def render_html(posts: list[dict[str, Any]]) -> str:
           }
         });
         
+        // Get checked districts
+        const checkedDistricts = [];
+        districtCheckboxes.forEach(cb => {
+          if (cb.checked) {
+            checkedDistricts.push(cb.getAttribute('data-district'));
+          }
+        });
+        
         let visibleCount = 0;
         
         posts.forEach(post => {
@@ -868,7 +944,10 @@ def render_html(posts: list[dict[str, Any]]) -> str:
           const matchesChannel = checkedChannels.length === 0 || checkedChannels.includes(postChannel);
           const matchesCategory = activeCategory === 'all' || postCategories.includes(activeCategory);
           
-          if (matchesSearch && matchesDate && matchesChannel && matchesCategory) {
+          const postDistricts = post.getAttribute('data-districts')?.split(',') || [];
+          const matchesDistrict = checkedDistricts.length === 0 || checkedDistricts.some(d => postDistricts.includes(d));
+          
+          if (matchesSearch && matchesDate && matchesChannel && matchesCategory && matchesDistrict) {
             post.style.display = '';
             visibleCount++;
             
@@ -939,6 +1018,10 @@ def render_html(posts: list[dict[str, Any]]) -> str:
         cb.addEventListener('change', applyFilters);
       });
       
+      districtCheckboxes.forEach(cb => {
+        cb.addEventListener('change', applyFilters);
+      });
+      
       categoryButtons.forEach(btn => {
         btn.addEventListener('click', () => {
           categoryButtons.forEach(b => b.classList.remove('active'));
@@ -961,6 +1044,7 @@ def render_html(posts: list[dict[str, Any]]) -> str:
         activeCategory = 'all';
         
         channelCheckboxes.forEach(cb => cb.checked = false);
+        districtCheckboxes.forEach(cb => cb.checked = false);
         
         applyFilters();
       });
@@ -974,6 +1058,7 @@ def render_html(posts: list[dict[str, Any]]) -> str:
     res = template.replace("{RESET_BTN}", reset_btn_html)
     res = res.replace("{DATE_OPTIONS}", "\n".join(date_options_html))
     res = res.replace("{CHANNEL_OPTIONS}", "\n".join(channel_options_html))
+    res = res.replace("{DISTRICT_OPTIONS}", "\n".join(district_options_html))
     res = res.replace("{TOTAL_POSTS}", str(len(posts)))
     res = res.replace("{ALL_SECTIONS}", all_sections_html)
 
