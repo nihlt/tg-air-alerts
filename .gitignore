@@ -22,3 +22,6 @@ telegram_export.session*
 Thumbs.db
 .vscode/
 .idea/
+
+# Local docs and work logs (not versioned)
+docs/
