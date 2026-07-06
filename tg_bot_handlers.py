@@ -120,6 +120,34 @@ def process_live_bot_update(
     if not text:
         return
 
+    normalized = text.strip().lower().split("@", 1)[0]
+    if normalized in {"/start", "start", "/help", "help"}:
+        reply = (
+            "<b>Бот моніторингу повітряних загроз tg-air-alerts запущено!</b>\n\n"
+            "Цей бот агрегує повідомлення з каналів та надсилає вам готові згруповані події про повітряні загрози.\n\n"
+            "<b>Доступні команди:</b>\n"
+            "• /toggle — увімкнути/вимкнути пересилання шумних постів (постів без явних загроз)\n"
+            "• /status — перевірити статус роботи моніторингу"
+        )
+        api_bot.for_chat(chat_id).send_message(reply)
+        return
+
+    if normalized in {"/status", "status"}:
+        from tg_telethon_io import load_channels
+        try:
+            channels_count = len(load_channels())
+        except Exception:
+            channels_count = 0
+        noise_mode = "надсилати" if state.forward_noise else "ігнорувати"
+        reply = (
+            "<b>Статус моніторингу:</b>\n"
+            f"• Активних каналів: <b>{channels_count}</b>\n"
+            f"• Пересилання шумних постів: <b>{noise_mode}</b>\n"
+            "• Система активна та слухає ефір."
+        )
+        api_bot.for_chat(chat_id).send_message(reply)
+        return
+
     if is_toggle_command(text):
         reply = toggle_forward_noise(state)
         api_bot.for_chat(chat_id).send_message(reply)

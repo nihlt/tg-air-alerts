@@ -77,7 +77,8 @@ def find_listener_pids(*, exclude_pid: int | None = None) -> list[int]:
     if lock_pid is not None:
         pids.add(lock_pid)
 
-    pids.update(find_python_listener_pids(exclude_pid=exclude_pid))
+    pids.update(find_python_listener_pids("listen_tg_channels.py", exclude_pid=exclude_pid))
+    pids.update(find_python_listener_pids("tg_bot_debug.py", exclude_pid=exclude_pid))
     return sorted(pids)
 
 
@@ -118,7 +119,7 @@ def acquire_listener_lock() -> None:
     if lock_pid is not None and process_exists(lock_pid) and lock_pid != os.getpid():
         raise RuntimeError(
             f"Another listener is already running (pid {lock_pid}). "
-            "Run cleanup_listener.bat first."
+            "Run cleanup_listener.sh first."
         )
     if LISTENER_LOCK_PATH.exists():
         LISTENER_LOCK_PATH.unlink(missing_ok=True)

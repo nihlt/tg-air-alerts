@@ -29,6 +29,7 @@ from tg_telethon_io import (
     create_telegram_client,
     download_photo,
     ensure_export_dirs,
+    is_ad_message,
     load_channels,
     message_to_record,
 )
@@ -60,10 +61,12 @@ class LiveChannelListener:
         client: TelegramClient,
         bot: TelegramBot,
         jsonl_path: Path = LIVE_JSONL_PATH,
+        leave_on_exit: bool = False,
     ) -> None:
         self.client = client
         self.bot = bot
         self.jsonl_path = jsonl_path
+        self.leave_on_exit = leave_on_exit
         self.author_chat_id = str(bot.chat_id)
         self.api_bot = TelegramBot(bot.token)
         self.channel_urls: dict[int, str] = {}
@@ -89,9 +92,12 @@ class LiveChannelListener:
                 continue
 
             try:
-                await self.client(JoinChannelRequest(entity))
-                self.joined_in_session.append(entity)
-                logger.info("Joined %s", channel_url)
+                if getattr(entity, "left", True):
+                    await self.client(JoinChannelRequest(entity))
+                    self.joined_in_session.append(entity)
+                    logger.info("Joined %s", channel_url)
+                else:
+                    logger.info("Already in %s (skipped join)", channel_url)
             except UserAlreadyParticipantError:
                 logger.info("Already in %s", channel_url)
             except ChannelPrivateError:
@@ -137,6 +143,15 @@ class LiveChannelListener:
 
             entity = self._entity_for(chat_id)
             channel_url = self._channel_url_for(chat_id)
+
+            if is_ad_message(message, channel_url):
+                logger.info(
+                    "Skip post %s:%s: classified as ad",
+                    getattr(entity, "username", None) or getattr(entity, "title", None) or chat_id,
+                    message.id
+                )
+                return
+
             channel_name = None
             if entity is not None:
                 channel_name = getattr(entity, "username", None) or getattr(entity, "title", None)
@@ -256,7 +271,8 @@ class LiveChannelListener:
             return
         self._stopped = True
         self.state.save()
-        await self.leave_listening_channels()
+        if self.leave_on_exit:
+            await self.leave_listening_channels()
         if self.client.is_connected():
             await self.client.disconnect()
 
@@ -294,13 +310,13 @@ class LiveChannelListener:
             self.state.save()
 
 
-async def run_listener(*, jsonl_path: Path = LIVE_JSONL_PATH) -> None:
+async def run_listener(*, jsonl_path: Path = LIVE_JSONL_PATH, leave_on_exit: bool = False) -> None:
     acquire_listener_lock()
     try:
         token, author_id = load_bot_config()
         bot = TelegramBot(token, author_id)
         client = await create_telegram_client()
-        listener = LiveChannelListener(client=client, bot=bot, jsonl_path=jsonl_path)
+        listener = LiveChannelListener(client=client, bot=bot, jsonl_path=jsonl_path, leave_on_exit=leave_on_exit)
 
         try:
             await listener.run()
@@ -318,8 +334,13 @@ def main() -> None:
         default=LIVE_JSONL_PATH,
         help=f"Append live posts to this jsonl file (default: {LIVE_JSONL_PATH.name})",
     )
+    parser.add_argument(
+        "--leave-on-exit",
+        action="store_true",
+        help="Leave all monitored channels when exiting",
+    )
     args = parser.parse_args()
-    asyncio.run(run_listener(jsonl_path=args.jsonl_path))
+    asyncio.run(run_listener(jsonl_path=args.jsonl_path, leave_on_exit=args.leave_on_exit))
 
 
 if __name__ == "__main__":

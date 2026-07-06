@@ -13,6 +13,7 @@ from tg_telethon_io import (
     create_telegram_client,
     download_photo,
     ensure_export_dirs,
+    is_ad_message,
     load_channels,
     message_to_record,
 )
@@ -38,6 +39,9 @@ async def export_channel(client: TelegramClient, channel_url: str, output_file) 
 
         if message_date_utc < START_UTC:
             break
+
+        if is_ad_message(message, channel_url):
+            continue
 
         photo_path = await download_photo(message, channel_dir, channel_url)
         record = message_to_record(channel_url, message, photo_path)

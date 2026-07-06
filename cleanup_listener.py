@@ -83,6 +83,11 @@ async def leave_all_channels() -> int:
 
 
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="Cleanup listener.")
+    parser.add_argument("--leave", action="store_true", help="Leave all channels in list")
+    args, _ = parser.parse_known_args()
+
     print("=== cleanup listener ===\n")
 
     print("1) Stop listener processes")
@@ -96,13 +101,16 @@ def main() -> None:
     clean_session_files()
     print("   done")
 
-    print("\n3) Leave channels from tg-chanel-links.txt")
-    try:
-        left = asyncio.run(leave_all_channels())
-    except RuntimeError as exc:
-        print(f"   error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    print(f"\nDone. Left {left} channel(s).")
+    if args.leave:
+        print("\n3) Leave channels from tg-chanel-links.txt")
+        try:
+            left = asyncio.run(leave_all_channels())
+            print(f"\nDone. Left {left} channel(s).")
+        except RuntimeError as exc:
+            print(f"   error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+    else:
+        print("\n3) Skipping leaving channels (use --leave to unsubscribe)")
 
 
 if __name__ == "__main__":

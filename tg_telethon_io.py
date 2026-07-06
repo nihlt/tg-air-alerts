@@ -190,3 +190,114 @@ def append_jsonl(path: Path, record: dict) -> None:
 def ensure_export_dirs() -> None:
     EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def is_ad_message(message, current_channel_url: str | None = None) -> bool:
+    text = getattr(message, "message", "") or ""
+    reply_markup = getattr(message, "reply_markup", None)
+    if not text and not reply_markup:
+        return False
+
+    normalized_text = text.lower().replace("ё", "е")
+
+    current_username = None
+    if current_channel_url:
+        current_username = current_channel_url.strip().rstrip('/').split('/')[-1].lower()
+
+    monitored_usernames = set()
+    if current_username:
+        monitored_usernames.add(current_username)
+    try:
+        for url in load_channels():
+            u = url.strip().rstrip('/').split('/')[-1].lower()
+            if u:
+                monitored_usernames.add(u)
+    except Exception:
+        pass
+
+    def is_external_username(username: str) -> bool:
+        u = username.lower().strip('@')
+        if not u:
+            return False
+        if u.endswith('bot'):
+            return True
+        return u not in monitored_usernames
+
+    score = 0
+
+    invite_link_pattern = re.compile(
+        r'(?:https?://)?(?:t\.me|telegram\.me|telegram\.dog)/(?:\+|joinchat/)(?:[A-Za-z0-9_\-]+)',
+        re.IGNORECASE
+    )
+    invite_links = invite_link_pattern.findall(text)
+    if invite_links:
+        score += 3 * len(invite_links)
+
+    tg_invite_pattern = re.compile(r'tg://join\?invite=[A-Za-z0-9_\-]+', re.IGNORECASE)
+    tg_invites = tg_invite_pattern.findall(text)
+    if tg_invites:
+        score += 3 * len(tg_invites)
+
+    tg_link_pattern = re.compile(
+        r'(?:https?://)?(?:t\.me|telegram\.me|telegram\.dog)/(?:s/|c/)?([A-Za-z0-9_]{5,})',
+        re.IGNORECASE
+    )
+    for username in tg_link_pattern.findall(text):
+        username_lower = username.lower()
+        if username_lower not in {"joinchat", "share", "addstickers", "socks", "proxy", "join"}:
+            if is_external_username(username_lower):
+                if username_lower.endswith('bot'):
+                    score += 3
+                else:
+                    score += 2
+
+    mention_pattern = re.compile(r'@([A-Za-z0-9_]{5,})', re.IGNORECASE)
+    for username in mention_pattern.findall(text):
+        username_lower = username.lower()
+        if is_external_username(username_lower):
+            if username_lower.endswith('bot'):
+                score += 3
+            else:
+                score += 2
+
+    if reply_markup:
+        for row in getattr(reply_markup, "rows", []):
+            for button in getattr(row, "buttons", []):
+                if hasattr(button, "url") and button.url:
+                    url = str(button.url).lower()
+                    if "t.me/+" in url or "t.me/joinchat/" in url or "telegram.me/+" in url or "telegram.me/joinchat/" in url or "tg://join?invite=" in url:
+                        score += 3
+                    elif "t.me/" in url or "telegram.me/" in url or "telegram.dog/" in url:
+                        parts = url.split('/')
+                        if parts:
+                            last_part = parts[-1].split('?')[0]
+                            if is_external_username(last_part):
+                                score += 3
+                    elif url.startswith("tg://"):
+                        score += 2
+
+    cta_phrases = [
+        "підпишіться на", "підписуйтесь на", "підписуйся на", "підписатися на",
+        "подпишитесь на", "подписывайтесь на", "подписывайся на", "подписаться на",
+        "рекомендую підписатися", "рекомендуємо підписатися",
+        "рекомендую подписаться", "рекомендуем подписаться",
+        "вхід вільний", "вхід безкоштовний", "вход свободный", "вход бесплатный",
+        "детальніше тут", "подробнее тут", "детальніше в джерелі", "подробнее в источнике",
+        "переходьте за посиланням", "переходите по ссылке", "посилання на канал", "ссылка на канал",
+        "канал партнерів", "канал партнеров", "наші партнери", "наши партнеры"
+    ]
+    for phrase in cta_phrases:
+        if phrase in normalized_text:
+            score += 3
+
+    ad_keywords = [
+        "реклама", "спонсор", "промо", "партнер", "підписка", "подписка",
+        "підпишись", "подпись", "підписатися", "подписаться", "підписатись",
+        "рекомендую", "рекомендуємо", "рекомендуем"
+    ]
+    for keyword in ad_keywords:
+        if keyword in normalized_text:
+            score += 1
+
+    return score >= 3
+
