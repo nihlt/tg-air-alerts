@@ -4,16 +4,22 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from telethon import TelegramClient, events, utils
 from telethon.errors import ChannelPrivateError, UserAlreadyParticipantError, UserNotParticipantError
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 from telethon.tl.types import Channel
 
+from tg_bot_handlers import LiveListenerState, process_live_bot_update
+from tg_data import post_key
 from tg_format import escape_html
 from tg_listener_process import acquire_listener_lock, release_listener_lock
-from tg_send import SEND_PAUSE_SECONDS, TelegramBot, load_bot_config
+from tg_live_events import IngestKind, LiveEventEngine
+from tg_rating import build_rating_keyboard
+from tg_send import SEND_PAUSE_SECONDS, TelegramBot, load_bot_config, send_event_alert, send_summary_alert
 from tg_telethon_io import (
     BASE_DIR,
     LIVE_JSONL_PATH,
@@ -29,6 +35,8 @@ from tg_telethon_io import (
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+KYIV_TZ = ZoneInfo("Europe/Kyiv")
+FLUSH_INTERVAL_SECONDS = 5
 
 
 def format_live_message(record: dict) -> str:
@@ -56,10 +64,15 @@ class LiveChannelListener:
         self.client = client
         self.bot = bot
         self.jsonl_path = jsonl_path
+        self.author_chat_id = str(bot.chat_id)
+        self.api_bot = TelegramBot(bot.token)
         self.channel_urls: dict[int, str] = {}
         self.entities_by_chat_id: dict[int, Channel] = {}
         self.entities: list[Channel] = []
         self.joined_in_session: list[Channel] = []
+        self.engine = LiveEventEngine()
+        self.posts_index: dict[str, dict] = {}
+        self.state = LiveListenerState.load()
         self._stopped = False
         self._message_lock = asyncio.Lock()
 
@@ -106,6 +119,15 @@ class LiveChannelListener:
             return None
         return self.entities_by_chat_id.get(chat_id)
 
+    async def _forward_noise_post(self, record: dict, photo_path: Path | None) -> None:
+        caption = format_live_message(record)
+        if photo_path is not None:
+            absolute_path = BASE_DIR / photo_path
+            await asyncio.to_thread(self.bot.send_photo, absolute_path, caption=caption)
+        else:
+            await asyncio.to_thread(self.bot.send_message, caption)
+        await asyncio.sleep(SEND_PAUSE_SECONDS)
+
     async def handle_message(self, event: events.NewMessage.Event) -> None:
         async with self._message_lock:
             message = event.message
@@ -131,28 +153,90 @@ class LiveChannelListener:
             )
             append_jsonl(self.jsonl_path, record)
 
-            caption = format_live_message(record)
+            key = post_key(record.get("channel"), record.get("message_id"))
+            self.posts_index[key] = record
+
+            result = self.engine.ingest(record)
             logger.info(
-                "New post %s:%s",
+                "New post %s:%s -> %s",
                 record.get("channel"),
                 record.get("message_id"),
+                result.kind.value,
             )
 
+            if result.kind == IngestKind.EMPTY:
+                return
+
             try:
-                if photo_path is not None:
-                    absolute_path = BASE_DIR / photo_path
-                    await asyncio.to_thread(self.bot.send_photo, absolute_path, caption=caption)
-                else:
-                    await asyncio.to_thread(self.bot.send_message, caption)
+                if result.kind == IngestKind.SUMMARY:
+                    keyboard = build_rating_keyboard(key)
+                    await asyncio.to_thread(
+                        send_summary_alert,
+                        self.bot,
+                        record,
+                        self.posts_index,
+                        reply_markup=keyboard,
+                    )
+                    await asyncio.sleep(SEND_PAUSE_SECONDS)
+                    return
+
+                if result.kind == IngestKind.IGNORED:
+                    if self.state.forward_noise:
+                        await self._forward_noise_post(record, photo_path)
+                    return
+
             except Exception:
                 logger.exception(
-                    "Failed to forward %s:%s",
+                    "Failed to send alert for %s:%s",
                     record.get("channel"),
                     record.get("message_id"),
                 )
-                return
 
-            await asyncio.sleep(SEND_PAUSE_SECONDS)
+    async def flush_loop(self) -> None:
+        while not self._stopped:
+            try:
+                now = datetime.now(KYIV_TZ)
+                for thread in self.engine.ready_threads(now):
+                    event = self.engine.thread_to_event(thread)
+                    keyboard = build_rating_keyboard(event["id"])
+                    await asyncio.to_thread(
+                        send_event_alert,
+                        self.bot,
+                        event,
+                        self.posts_index,
+                        reply_markup=keyboard,
+                    )
+                    self.engine.mark_sent(thread.id)
+                    logger.info("Sent live event %s", thread.id)
+                    await asyncio.sleep(SEND_PAUSE_SECONDS)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Flush loop error")
+            await asyncio.sleep(FLUSH_INTERVAL_SECONDS)
+
+    async def bot_updates_loop(self) -> None:
+        while not self._stopped:
+            try:
+                updates = await asyncio.to_thread(
+                    self.api_bot.get_updates,
+                    offset=self.state.update_offset,
+                    timeout=30,
+                )
+                for update in updates:
+                    await asyncio.to_thread(
+                        process_live_bot_update,
+                        self.api_bot,
+                        update,
+                        author_chat_id=self.author_chat_id,
+                        state=self.state,
+                    )
+                    self.state.save()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Bot updates loop error")
+                await asyncio.sleep(1)
 
     async def leave_listening_channels(self) -> None:
         for entity in self.entities:
@@ -171,6 +255,7 @@ class LiveChannelListener:
         if self._stopped:
             return
         self._stopped = True
+        self.state.save()
         await self.leave_listening_channels()
         if self.client.is_connected():
             await self.client.disconnect()
@@ -179,6 +264,12 @@ class LiveChannelListener:
         channel_urls = load_channels()
         ensure_export_dirs()
         await self.setup_channels(channel_urls)
+
+        noise_mode = "надсилати" if self.state.forward_noise else "ігнорувати"
+        logger.info("Noise posts: %s (/toggle to switch)", noise_mode)
+
+        flush_task = asyncio.create_task(self.flush_loop())
+        updates_task = asyncio.create_task(self.bot_updates_loop())
 
         @self.client.on(events.NewMessage(chats=self.entities))
         async def on_new_message(event: events.NewMessage.Event) -> None:
@@ -190,7 +281,17 @@ class LiveChannelListener:
                 logger.exception("Failed to handle incoming message")
 
         logger.info("Live listener running. Press Ctrl+C to stop.")
-        await self.client.run_until_disconnected()
+        try:
+            await self.client.run_until_disconnected()
+        finally:
+            flush_task.cancel()
+            updates_task.cancel()
+            for task in (flush_task, updates_task):
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            self.state.save()
 
 
 async def run_listener(*, jsonl_path: Path = LIVE_JSONL_PATH) -> None:

@@ -14,7 +14,7 @@ from typing import Any
 from dotenv import dotenv_values
 
 from tg_data import BASE_DIR, enrich_event_posts, enrich_post
-from tg_format import format_event_text, format_photo_caption, format_summary_text
+from tg_format import format_event_text, format_summary_text
 from tg_data import TimelineItem
 
 ENV_PATH = BASE_DIR / ".env"
@@ -281,19 +281,13 @@ def send_photos_for_posts(
     enriched_posts: list[dict[str, Any]],
     *,
     base_dir: Path = BASE_DIR,
-    reply_markup_on_last: dict[str, Any] | None = None,
-) -> int | None:
+) -> None:
     photos = collect_photos(enriched_posts, base_dir=base_dir)
     if not photos:
-        return None
+        return
 
     batches = chunk_photos(photos)
-    last_message_id: int | None = None
-    for batch_index, batch in enumerate(batches):
-        is_last_batch = batch_index == len(batches) - 1
-        markup = reply_markup_on_last if is_last_batch else None
-        batch_posts = [item["post"] for item in batch]
-        caption = format_photo_caption(batch_posts)
+    for batch in batches:
         photo_items = [
             PhotoItem(
                 path=item["path"],
@@ -303,27 +297,10 @@ def send_photos_for_posts(
             for item in batch
         ]
         if len(photo_items) == 1:
-            response = bot.send_photo(
-                photo_items[0].path,
-                caption=caption or None,
-                reply_markup=markup,
-            )
-            last_message_id = _extract_message_id(response)
+            bot.send_photo(photo_items[0].path)
         else:
-            response = bot.send_media_group(photo_items, caption=caption or None)
-            last_message_id = _extract_message_id(response)
-            if markup is not None:
-                nav_response = send_navigation_message(bot, markup)
-                last_message_id = _extract_message_id(nav_response) or last_message_id
+            bot.send_media_group(photo_items)
         _pause()
-    return last_message_id
-
-
-def send_navigation_message(
-    bot: TelegramBot,
-    reply_markup: dict[str, Any],
-) -> dict[str, Any]:
-    return bot.send_message("·", reply_markup=reply_markup)
 
 
 def send_event_alert(
@@ -334,7 +311,7 @@ def send_event_alert(
     debug: bool = False,
     debug_meta: tuple[TimelineItem, int, int] | None = None,
     base_dir: Path = BASE_DIR,
-    reply_markup_on_last: dict[str, Any] | None = None,
+    reply_markup: dict[str, Any] | None = None,
 ) -> int | None:
     text = format_event_text(
         event,
@@ -343,20 +320,10 @@ def send_event_alert(
         debug_meta=debug_meta,
     )
     enriched_posts = enrich_event_posts(event, posts_index)
-    has_photos = bool(collect_photos(enriched_posts, base_dir=base_dir))
-    response = bot.send_message(
-        text,
-        reply_markup=None if has_photos else reply_markup_on_last,
-    )
-    last_message_id = _extract_message_id(response)
+    send_photos_for_posts(bot, enriched_posts, base_dir=base_dir)
+    response = bot.send_message(text, reply_markup=reply_markup)
     _pause()
-    photo_message_id = send_photos_for_posts(
-        bot,
-        enriched_posts,
-        base_dir=base_dir,
-        reply_markup_on_last=reply_markup_on_last,
-    )
-    return photo_message_id or last_message_id
+    return _extract_message_id(response)
 
 
 def send_summary_alert(
@@ -367,7 +334,7 @@ def send_summary_alert(
     debug: bool = False,
     debug_meta: tuple[TimelineItem, int, int] | None = None,
     base_dir: Path = BASE_DIR,
-    reply_markup_on_last: dict[str, Any] | None = None,
+    reply_markup: dict[str, Any] | None = None,
 ) -> int | None:
     enriched = enrich_post(post, posts_index)
     text = format_summary_text(enriched)
@@ -375,17 +342,7 @@ def send_summary_alert(
         from tg_format import escape_html, format_debug_footer
 
         text = f"{text}\n\n{escape_html(format_debug_footer(*debug_meta))}"
-    has_photos = bool(collect_photos([enriched], base_dir=base_dir))
-    response = bot.send_message(
-        text,
-        reply_markup=None if has_photos else reply_markup_on_last,
-    )
-    last_message_id = _extract_message_id(response)
+    send_photos_for_posts(bot, [enriched], base_dir=base_dir)
+    response = bot.send_message(text, reply_markup=reply_markup)
     _pause()
-    photo_message_id = send_photos_for_posts(
-        bot,
-        [enriched],
-        base_dir=base_dir,
-        reply_markup_on_last=reply_markup_on_last,
-    )
-    return photo_message_id or last_message_id
+    return _extract_message_id(response)

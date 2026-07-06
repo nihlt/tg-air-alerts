@@ -258,25 +258,9 @@ def format_event_text(
 
     blocks: list[str] = [f"<b>{escape_html(headline)}</b>"]
 
-    location = format_event_location(event, labels)
-    if location:
-        blocks.append(escape_html(location))
-
-    direction = format_event_direction(event, labels)
-    if direction:
-        blocks.append(escape_html(direction))
-
-    phase = format_event_phase(event)
-    if phase:
-        blocks.append(escape_html(phase))
-
     source_count = unique_channel_count(enriched_posts)
     time_text = format_time_range(event.get("started_at"), event.get("last_post_at"))
     blocks.append(escape_html(f"{time_text} · {source_count} джерел"))
-
-    quote = pick_quote_text(event, posts_index, headline=headline)
-    if quote:
-        blocks.append(f"«{escape_html(quote)}»")
 
     links = format_channel_links(enriched_posts, first_per_channel=True)
     if links:

@@ -24,8 +24,9 @@ flowchart LR
   listen -->|JoinChannel| tg[Telegram channels]
   tg -->|NewMessage| listen
   listen -->|append| jsonl[exports/tg_posts_live.jsonl]
-  listen -->|sendMessage / sendPhoto| bot[tg_send.TelegramBot]
+  listen -->|group + alert| bot[tg_send.TelegramBot]
   bot --> author[TELEGRAM_AUTHOR]
+  listen -->|getUpdates| bot
   listen -->|Ctrl+C LeaveChannel| tg
 ```
 
@@ -40,7 +41,9 @@ flowchart LR
 
 | Файл | Призначення |
 |------|-------------|
-| `listen_tg_channels.py` | live listener |
+| `listen_tg_channels.py` | live listener + групування + алерти |
+| `tg_live_events.py` | інкрементальне групування подій |
+| `tg_bot_handlers.py` | рейтинг, `/toggle`, стан listener |
 | `cleanup_listener.py` / `.bat` | зупинка процесів + відписка + очистка lock |
 | `migrate_telegram_session.py` | одноразова міграція зі старого SQLite |
 | `run_listener.bat` | cleanup → listener |
@@ -185,22 +188,36 @@ PermissionError: ... telegram_export.session ... used by another process
 ## Поведінка listener
 
 1. Join у публічні канали зі списку (auto-join)
-2. `NewMessage` → jsonl + пересилання автору (текст / фото)
-3. **Ctrl+C** → leave усіх каналів зі списку → disconnect
+2. `NewMessage` → завжди в jsonl
+3. Пост класифікується (`tg_live_events.LiveEventEngine`):
+   - **summary** (3+ location-маркери) → одразу `send_summary_alert`
+   - **подія** (зброя / merge) → буфер, відправка після закриття thread (~2 хв + тиша + grace)
+   - **шум** → за замовчуванням ігнор у боті; `/toggle` перемикає сирий forward
+4. Алерт: фото альбомом → текст + кнопки `bullshit` / `valuable`
+5. Паралельно `getUpdates` — рейтинг і `/toggle`
+6. **Ctrl+C** → leave усіх каналів → disconnect
 
-Формат у боті:
+Формат події в боті (як на сайті):
 
 ```
-@channel · 05:20
-channel:12345
+3 Ракети → Київ, Харків
 
-текст поста
+14:32–14:45 · 5 джерел
+eRadarrua · monitor_ukraine
 ```
 
-## Що далі (не в MVP)
+### Команди бота (live)
 
-- групування в події (`news_events`)
-- фільтрація за маркерами
+| Команда | Дія |
+|---------|-----|
+| `/toggle` | Шумні пости: надсилати / ігнорувати |
+
+Стан: `exports/live_listener_state.json` (`forward_noise`, `update_offset`).
+
+**Не запускай** `tg_bot_debug.py` і listener одночасно — один бот, один `getUpdates`.
+
+## Що далі
+
+- аналіз `exports/ratings.jsonl`
+- фільтрація за маркерами (не слати шум навіть з toggle)
 - розсилка іншим підписникам
-
-Поки listener пересилає **усі** пости без фільтрації.

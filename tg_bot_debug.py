@@ -22,6 +22,8 @@ from tg_data import (
     load_posts_index,
     normalize_event_id,
 )
+from tg_bot_handlers import apply_rating_callback
+from tg_rating import build_rating_keyboard
 from tg_send import TelegramBot, load_bot_token, send_event_alert, send_summary_alert
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,8 +36,8 @@ def build_help_text(event_range_hint: str) -> str:
 Тут можна переглядати згруповані події та summary-пости з експорту — так само, як на сайті, але в Telegram.
 
 <b>Як це працює</b>
-<b>Кнопки prev / next</b>
-<i>з’являються на останньому повідомленні алерту — натисни, щоб листати таймлайн</i>
+<b>Кнопки оцінки</b>
+<i>під текстовим алертом: bullshit (зліва) або valuable (справа). Після вибору кнопка показує 🚫 або ✅</i>
 
 <b>Листання</b>
 <code>n</code> або <code>next</code>
@@ -75,15 +77,6 @@ DATE_TIME_RE = re.compile(
 )
 TIME_ONLY_RE = re.compile(r"^(?P<hour>\d{1,2})[:\.](?P<minute>\d{2})$")
 GOTO_RE = re.compile(r"^/goto(?:@\w+)?\s+(?P<target>.+)$", re.IGNORECASE)
-
-NAV_KEYBOARD = {
-    "inline_keyboard": [
-        [
-            {"text": "prev", "callback_data": "nav:prev"},
-            {"text": "next", "callback_data": "nav:next"},
-        ]
-    ]
-}
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -131,6 +124,7 @@ class DebugSession:
             return
 
         debug_meta = (item, self.index, len(self.timeline))
+        keyboard = build_rating_keyboard(item.item_id)
         if item.kind == "event" and item.event:
             send_event_alert(
                 self.bot,
@@ -138,7 +132,7 @@ class DebugSession:
                 self.posts_index,
                 debug=True,
                 debug_meta=debug_meta,
-                reply_markup_on_last=NAV_KEYBOARD,
+                reply_markup=keyboard,
             )
         elif item.summary_post:
             send_summary_alert(
@@ -147,7 +141,7 @@ class DebugSession:
                 self.posts_index,
                 debug=True,
                 debug_meta=debug_meta,
-                reply_markup_on_last=NAV_KEYBOARD,
+                reply_markup=keyboard,
             )
 
     def move(self, delta: int) -> str | None:
@@ -241,12 +235,22 @@ class DebugSession:
             "Для стрибка за часом: 2026-07-02 02:15"
         )
 
-    def handle_callback(self, data: str) -> str | None:
-        if data == "nav:next":
-            return self.move(1)
-        if data == "nav:prev":
-            return self.move(-1)
-        return "Невідома дія."
+    def handle_rating_callback(
+        self,
+        data: str,
+        *,
+        bot_message_id: int,
+        user_id: int | str,
+        username: str | None,
+    ) -> str | None:
+        return apply_rating_callback(
+            self.bot,
+            chat_id=self.chat_id,
+            data=data,
+            bot_message_id=bot_message_id,
+            user_id=user_id,
+            username=username,
+        )
 
 
 class DebugBotRouter:
@@ -350,7 +354,17 @@ class DebugBotRouter:
 
         session = self.session_for(chat_id)
         try:
-            notice = session.handle_callback(data)
+            message_id = message.get("message_id")
+            from_user = callback.get("from") or {}
+            if message_id is not None and str(data).startswith("rate:"):
+                notice = session.handle_rating_callback(
+                    data,
+                    bot_message_id=int(message_id),
+                    user_id=from_user.get("id", 0),
+                    username=from_user.get("username"),
+                )
+            else:
+                notice = "Невідома дія."
             if notice:
                 self.api_bot.answer_callback_query(callback_id, text=notice)
             else:
