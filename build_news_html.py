@@ -4,11 +4,130 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+from news_events import group_events
 
 BASE_DIR = Path(__file__).resolve().parent
 EXPORTS_DIR = BASE_DIR / "exports"
 INPUT_PATH = EXPORTS_DIR / "tg_posts_2026-07-01_1600_to_2026-07-02_0800.jsonl"
 OUTPUT_PATH = EXPORTS_DIR / "news.html"
+MARKERS_PATH = BASE_DIR / "tg-news-markers.json"
+
+EVENT_STYLES = """
+    .events-panel {
+      position: sticky;
+      top: 16px;
+      z-index: 10;
+      align-self: start;
+      max-height: calc(100vh - 32px);
+      overflow: hidden;
+      padding: 14px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      background: rgb(255 255 255 / 94%);
+      box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+      backdrop-filter: blur(10px);
+    }
+    .events-panel-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .events-panel-title h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .events-help {
+      color: #6b7280;
+      font-size: 13px;
+    }
+    .events-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
+    }
+    .event-card {
+      display: grid;
+      grid-template-columns: 6px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 10px 10px 0;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      width: 100%;
+    }
+    .event-card:hover,
+    .event-card:focus-visible {
+      border-color: #9ca3af;
+      box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
+    }
+    .event-card-swatch {
+      width: 6px;
+      align-self: stretch;
+      border-radius: 999px;
+      margin-left: 10px;
+    }
+    .event-card-body {
+      min-width: 0;
+      padding-right: 8px;
+    }
+    .event-card-message {
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .event-card-meta {
+      margin: 0;
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .event-card-send {
+      margin: 4px 0 0;
+      color: #2563eb;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .message--grouped {
+      border-left-width: 4px;
+      border-left-style: solid;
+    }
+    .message--summary {
+      border-left: 4px solid #f8fafc;
+      background: rgb(248 250 252 / 88%);
+    }
+"""
+
+EVENT_SCRIPT = """
+  <script>
+    (() => {
+      document.querySelectorAll("[data-event-card]").forEach((card) => {
+        card.addEventListener("click", () => {
+          const eventId = card.dataset.eventCard;
+          const target = document.querySelector(`[data-event-id="${eventId}"]`);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.classList.add("message--highlight");
+            window.setTimeout(() => target.classList.remove("message--highlight"), 1200);
+          }
+        });
+      });
+    })();
+  </script>
+"""
 
 MARKER_STYLES = """
     .marker-panel {
@@ -155,6 +274,10 @@ MARKER_STYLES = """
     .marker-highlight-other {
       background: #fde047;
     }
+    .message--highlight {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
 """
 
 MARKER_SCRIPT = """
@@ -179,7 +302,6 @@ MARKER_SCRIPT = """
         ["KeyE", "equipment"],
         ["KeyR", "other"],
       ]);
-      let markers = loadMarkers();
 
       function normalizeMarkerText(value) {
         return value.replace(/\\s+/g, " ").trim();
@@ -222,18 +344,43 @@ MARKER_SCRIPT = """
         return Array.from(byText.values());
       }
 
-      function loadMarkers() {
+      function readSeedMarkers() {
+        const seedElement = document.getElementById("tg-news-markers-seed");
+        if (!seedElement) {
+          return [];
+        }
+
         try {
-          const storedMarkers = JSON.parse(localStorage.getItem(storageKey) || "[]");
-          if (!Array.isArray(storedMarkers)) {
+          const parsed = JSON.parse(seedElement.textContent || "[]");
+          if (!Array.isArray(parsed)) {
             return [];
           }
 
-          return uniqueMarkers(storedMarkers.map(normalizeMarker));
+          return uniqueMarkers(parsed.map(normalizeMarker));
         } catch {
           return [];
         }
       }
+
+      const seedMarkers = readSeedMarkers();
+
+      function loadMarkers() {
+        try {
+          const storedMarkers = JSON.parse(localStorage.getItem(storageKey) || "[]");
+          const stored = Array.isArray(storedMarkers)
+            ? uniqueMarkers(storedMarkers.map(normalizeMarker))
+            : [];
+          const byText = new Map();
+
+          seedMarkers.forEach((marker) => byText.set(markerIdentity(marker.text), marker));
+          stored.forEach((marker) => byText.set(markerIdentity(marker.text), marker));
+          return Array.from(byText.values());
+        } catch {
+          return [...seedMarkers];
+        }
+      }
+
+      let markers = loadMarkers();
 
       function saveMarkers() {
         try {
@@ -353,11 +500,13 @@ MARKER_SCRIPT = """
         const counts = new Map(markers.map((marker) => [markerIdentity(marker.text), 0]));
 
         clearHighlights();
+        const messageContainers = document.querySelectorAll(messageTextSelector);
         markers.forEach((marker) => {
-          document.querySelectorAll(messageTextSelector).forEach((container) => {
+          messageContainers.forEach((container) => {
             textNodesIn(container).forEach((textNode) => {
               const key = markerIdentity(marker.text);
-              counts.set(key, (counts.get(key) || 0) + highlightTextNode(textNode, marker));
+              const created = highlightTextNode(textNode, marker);
+              counts.set(key, (counts.get(key) || 0) + created);
             });
           });
         });
@@ -365,8 +514,17 @@ MARKER_SCRIPT = """
         return counts;
       }
 
-      function renderMarkers() {
-        const counts = applyHighlights();
+      function countExistingHighlights() {
+        const counts = new Map(markers.map((marker) => [markerIdentity(marker.text), 0]));
+        document.querySelectorAll("mark.marker-highlight").forEach((highlight) => {
+          const key = markerIdentity(highlight.dataset.marker || highlight.textContent || "");
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        return counts;
+      }
+
+      function renderMarkers(useExistingHighlights = false) {
+        const counts = useExistingHighlights ? countExistingHighlights() : applyHighlights();
         markerList.textContent = "";
         markerEmpty.hidden = markers.length > 0;
         markerExportButton.disabled = markers.length === 0;
@@ -462,10 +620,31 @@ MARKER_SCRIPT = """
         }
         markerImportInput.value = "";
       });
-      renderMarkers();
+      renderMarkers(true);
     })();
   </script>
 """
+
+
+def load_seed_markers() -> list[dict[str, str]]:
+    if not MARKERS_PATH.exists():
+        return []
+
+    try:
+        with MARKERS_PATH.open("r", encoding="utf-8") as markers_file:
+            markers = json.load(markers_file)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(markers, list):
+        return []
+
+    return markers
+
+
+def render_seed_markers_script(markers: list[dict[str, str]]) -> str:
+    seed_json = json.dumps(markers, ensure_ascii=False).replace("</", "<\\/")
+    return f'  <script type="application/json" id="tg-news-markers-seed">{seed_json}</script>'
 
 
 def load_posts() -> list[dict[str, Any]]:
@@ -512,13 +691,118 @@ def format_date(value: object) -> str:
     return parsed_date.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def render_text(post: dict[str, Any]) -> str:
+def normalize_for_search(value: str) -> str:
+    return value.casefold().replace("ё", "е")
+
+
+def normalize_marker_text(value: str) -> str:
+    return " ".join(value.split())
+
+
+def valid_marker_category(value: object) -> str:
+    if value in {"location", "weapon", "equipment", "other"}:
+        return str(value)
+    return "other"
+
+
+def normalize_markers(markers: list[object]) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for marker in markers:
+        if isinstance(marker, str):
+            text = normalize_marker_text(marker)
+            category = "other"
+        elif isinstance(marker, dict):
+            text = normalize_marker_text(str(marker.get("text") or ""))
+            category = valid_marker_category(marker.get("category"))
+        else:
+            continue
+
+        if not text:
+            continue
+
+        identity = normalize_for_search(text)
+        if identity in seen:
+            continue
+
+        seen.add(identity)
+        normalized.append({"text": text, "category": category})
+
+    return normalized
+
+
+def highlight_text_with_markers(text: str, markers: list[dict[str, str]]) -> str:
+    if not text:
+        return ""
+
+    if not markers:
+        return escape(text).replace("\n", "<br>")
+
+    categories: list[str | None] = [None] * len(text)
+    marker_labels: list[str | None] = [None] * len(text)
+    lower_text = normalize_for_search(text)
+
+    for marker in markers:
+        marker_text = marker["text"]
+        lower_marker = normalize_for_search(marker_text)
+        category = marker["category"]
+        cursor = 0
+
+        while cursor < len(text):
+            match_index = lower_text.find(lower_marker, cursor)
+            if match_index == -1:
+                break
+
+            end_index = match_index + len(marker_text)
+            if all(categories[index] is None for index in range(match_index, end_index)):
+                for index in range(match_index, end_index):
+                    categories[index] = category
+                    marker_labels[index] = marker_text
+
+            cursor = match_index + len(marker_text)
+
+    parts: list[str] = []
+    index = 0
+    while index < len(text):
+        category = categories[index]
+        if category is None:
+            next_index = index + 1
+            while next_index < len(text) and categories[next_index] is None:
+                next_index += 1
+            chunk = text[index:next_index]
+            parts.append(escape(chunk).replace("\n", "<br>"))
+            index = next_index
+            continue
+
+        next_index = index + 1
+        while next_index < len(text) and categories[next_index] == category:
+            next_index += 1
+
+        chunk = text[index:next_index]
+        marker_text = marker_labels[index] or chunk
+        escaped_chunk = escape(chunk).replace("\n", "<br>")
+        escaped_marker = escape(marker_text, quote=True)
+        parts.append(
+            f'<mark class="marker-highlight marker-highlight-{category}" '
+            f'data-marker="{escaped_marker}" data-category="{category}">'
+            f"{escaped_chunk}</mark>"
+        )
+        index = next_index
+
+    return "".join(parts)
+
+
+def render_text(post: dict[str, Any], markers: list[dict[str, str]] | None = None) -> str:
     text = str(post.get("text") or "").strip()
     if not text and post.get("has_media"):
         text = "Без тексту"
 
     if not text:
         return ""
+
+    if markers:
+        return highlight_text_with_markers(text, markers)
 
     return escape(text).replace("\n", "<br>")
 
@@ -537,11 +821,21 @@ def render_photo(post: dict[str, Any]) -> str:
     return f'<img class="message-photo" src="{escaped_path}" alt="Telegram post photo">'
 
 
-def render_post(post: dict[str, Any]) -> str:
+def post_key(post: dict[str, Any]) -> str:
+    return f"{post.get('channel')}:{post.get('message_id')}"
+
+
+def render_post(
+    post: dict[str, Any],
+    event: dict[str, Any] | None = None,
+    *,
+    is_summary: bool = False,
+    markers: list[dict[str, str]] | None = None,
+) -> str:
     channel = escape(str(post.get("channel") or "unknown"))
     channel_url = escape(str(post.get("channel_url") or "#"), quote=True)
     date_kyiv = escape(format_date(post.get("date_kyiv")))
-    text_html = render_text(post)
+    text_html = render_text(post, markers)
     photo_html = render_photo(post)
     views = escape(str(post.get("views") if post.get("views") is not None else "-"))
     forwards = escape(str(post.get("forwards") if post.get("forwards") is not None else "-"))
@@ -550,7 +844,22 @@ def render_post(post: dict[str, Any]) -> str:
 
     text_block = f'<div class="message-text">{text_html}</div>' if text_html else ""
 
-    return f"""<article class="message">
+    event_attrs = ""
+    event_classes = "message"
+    if is_summary:
+        event_attrs = ' data-post-kind="summary"'
+        event_classes = "message message--summary"
+    elif event:
+        event_color = escape(str(event.get("color") or "#94a3b8"))
+        event_id = escape(str(event.get("id") or ""))
+        event_attrs = (
+            f' data-event-id="{event_id}"'
+            f' id="post-{event_id}-{message_id}"'
+            f' style="--event-color: {event_color}; border-left-color: {event_color};"'
+        )
+        event_classes = "message message--grouped"
+
+    return f"""<article class="{event_classes}"{event_attrs}>
   <header class="message-header">
     <time>{date_kyiv}</time>
     <a href="{channel_url}" target="_blank" rel="noopener noreferrer">{channel}</a>
@@ -561,8 +870,71 @@ def render_post(post: dict[str, Any]) -> str:
 </article>"""
 
 
-def render_html(posts: list[dict[str, Any]]) -> str:
-    rendered_posts = "\n".join(render_post(post) for post in posts)
+def render_event_card(event: dict[str, Any]) -> str:
+    event_id = escape(str(event.get("id") or ""))
+    color = escape(str(event.get("color") or "#94a3b8"))
+    user_message = escape(str(event.get("user_message") or "Подія"))
+    started_at = escape(format_date(event.get("started_at")))
+    last_post_at = escape(format_date(event.get("last_post_at")))
+    send_at = escape(format_date(event.get("send_at")))
+    source_count = int(event.get("source_count") or 0)
+    channels = ", ".join(escape(channel) for channel in event.get("channels") or [])
+
+    return f"""<button class="event-card" type="button" data-event-card="{event_id}">
+  <span class="event-card-swatch" style="background: {color};"></span>
+  <span class="event-card-body">
+    <p class="event-card-message">{user_message}</p>
+    <p class="event-card-meta">{started_at} – {last_post_at}<br>{source_count} джерел: {channels}</p>
+    <p class="event-card-send">Відправити о {send_at}</p>
+  </span>
+</button>"""
+
+
+def render_events_panel(events: list[dict[str, Any]]) -> str:
+    if not events:
+        return """<section class="events-panel" aria-label="Згруповані події">
+      <div class="events-panel-title">
+        <h2>Події</h2>
+        <span class="events-help">0 подій</span>
+      </div>
+      <p class="events-help">Поки немає згрупованих подій.</p>
+    </section>"""
+
+    rendered_events = "\n".join(render_event_card(event) for event in events)
+    multi_source = sum(1 for event in events if int(event.get("source_count") or 0) > 1)
+
+    return f"""<section class="events-panel" aria-label="Згруповані події">
+      <div class="events-panel-title">
+        <h2>Події</h2>
+        <span class="events-help">{len(events)} подій · {multi_source} з 2+ джерел</span>
+      </div>
+      <div class="events-list">
+        {rendered_events}
+      </div>
+    </section>"""
+
+
+def render_html(
+    posts: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    assignment: dict[str, str],
+    summary_posts: set[str],
+) -> str:
+    events_by_id = {str(event["id"]): event for event in events}
+    seed_markers = normalize_markers(load_seed_markers())
+    rendered_posts = "\n".join(
+        render_post(
+            post,
+            events_by_id.get(assignment.get(post_key(post), "")),
+            is_summary=post_key(post) in summary_posts,
+            markers=seed_markers,
+        )
+        for post in posts
+    )
+    rendered_events = render_events_panel(events)
+    grouped_count = len(assignment)
+    summary_count = len(summary_posts)
+    seed_markers_script = render_seed_markers_script(seed_markers)
 
     return f"""<!doctype html>
 <html lang="uk">
@@ -583,10 +955,10 @@ def render_html(posts: list[dict[str, Any]]) -> str:
     }}
     main {{
       display: grid;
-      grid-template-columns: minmax(220px, 280px) minmax(0, 860px);
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 320px);
       gap: 24px;
       align-items: start;
-      max-width: 1200px;
+      max-width: 1600px;
       margin: 0 auto;
       padding: 24px 16px 48px;
     }}
@@ -643,7 +1015,15 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       color: #6b7280;
       font-size: 13px;
     }}
+    .message--grouped {{
+      background: color-mix(in srgb, var(--event-color) 12%, #ffffff);
+    }}
+    .message--summary {{
+      border-left-color: #f8fafc;
+      background: rgb(248 250 252 / 92%);
+    }}
 {MARKER_STYLES}
+{EVENT_STYLES}
     @media (prefers-color-scheme: dark) {{
       body {{
         background: #111827;
@@ -657,6 +1037,28 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       .message {{
         border-color: #374151;
         background: #1f2937;
+      }}
+      .message--grouped {{
+        background: color-mix(in srgb, var(--event-color) 18%, #1f2937);
+      }}
+      .message--summary {{
+        border-left-color: #e5e7eb;
+        background: rgb(229 231 235 / 18%);
+      }}
+      .events-panel {{
+        border-color: #4b5563;
+        background: rgb(31 41 55 / 94%);
+      }}
+      .events-help,
+      .event-card-meta {{
+        color: #9ca3af;
+      }}
+      .event-card {{
+        border-color: #374151;
+        background: #1f2937;
+      }}
+      .event-card-send {{
+        color: #93c5fd;
       }}
       .marker-panel {{
         border-color: #4b5563;
@@ -679,12 +1081,13 @@ def render_html(posts: list[dict[str, Any]]) -> str:
         color: #93c5fd;
       }}
     }}
-    @media (max-width: 960px) {{
+    @media (max-width: 1200px) {{
       main {{
         display: block;
         max-width: 860px;
       }}
-      .marker-panel {{
+      .marker-panel,
+      .events-panel {{
         top: 0;
         margin: 0 0 20px;
         max-height: none;
@@ -693,6 +1096,9 @@ def render_html(posts: list[dict[str, Any]]) -> str:
       .marker-list {{
         flex-flow: row wrap;
         max-height: 220px;
+      }}
+      .events-list {{
+        max-height: 320px;
       }}
       .marker-pill {{
         justify-content: flex-start;
@@ -704,7 +1110,7 @@ def render_html(posts: list[dict[str, Any]]) -> str:
   <main>
     <div class="page-header">
       <h1>Telegram News Timeline</h1>
-      <p class="summary">Повідомлень: {len(posts)}. Сортування: від ранніх до пізніх за київським часом.</p>
+      <p class="summary">Повідомлень: {len(posts)}. Подій: {len(events)}. У групах: {grouped_count}. Зведення: {summary_count}. Сортування: від ранніх до пізніх за київським часом.</p>
     </div>
     <section class="marker-panel" aria-label="Маркери для аналізу">
       <div class="marker-panel-title">
@@ -722,8 +1128,11 @@ def render_html(posts: list[dict[str, Any]]) -> str:
     <section class="message-feed" aria-label="Повідомлення Telegram">
       {rendered_posts}
     </section>
+    {rendered_events}
   </main>
+{seed_markers_script}
 {MARKER_SCRIPT}
+{EVENT_SCRIPT}
 </body>
 </html>
 """
@@ -731,8 +1140,15 @@ def render_html(posts: list[dict[str, Any]]) -> str:
 
 def main() -> None:
     posts = sorted(load_posts(), key=sort_key)
-    OUTPUT_PATH.write_text(render_html(posts), encoding="utf-8", newline="\n")
+    events, assignment, summary_posts = group_events(posts)
+    OUTPUT_PATH.write_text(
+        render_html(posts, events, assignment, summary_posts),
+        encoding="utf-8",
+        newline="\n",
+    )
     print(f"Read {len(posts)} posts from {INPUT_PATH}")
+    print(f"Grouped {len(assignment)} posts into {len(events)} events")
+    print(f"Summary posts: {len(summary_posts)}")
     print(f"Wrote HTML to {OUTPUT_PATH}")
 
 
