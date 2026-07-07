@@ -296,6 +296,7 @@ class LiveChannelListener:
                     await asyncio.to_thread(
                         process_live_bot_update,
                         self.api_bot,
+                        update,
                         bot=self.bot,
                         state=self.state,
                     )
