@@ -26,6 +26,6 @@ Thumbs.db
 .idea/
 
 # Local docs and work logs (not versioned)
-docs/
+# docs/
 !docs/LIVE_LISTENER.md
 !docs/TG_ALERTS_PLAN.md
