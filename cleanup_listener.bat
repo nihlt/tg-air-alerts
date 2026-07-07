@@ -1,5 +1,5 @@
 @echo off
 cd /d "%~dp0"
-python cleanup_listener.py
+python cleanup_listener.py --leave-channels
 echo.
 pause

@@ -1,7 +1,8 @@
-"""Зупинити listener, прибрати lock, відписатися від каналів зі списку."""
+"""Зупинити listener, прибрати lock. Опційно — відписатися від каналів."""
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import os
 import subprocess
@@ -83,6 +84,14 @@ async def leave_all_channels() -> int:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Stop listener and clean lock files.")
+    parser.add_argument(
+        "--leave-channels",
+        action="store_true",
+        help="Also unsubscribe from all channels in tg-chanel-links.csv",
+    )
+    args = parser.parse_args()
+
     print("=== cleanup listener ===\n")
 
     print("1) Stop listener processes")
@@ -96,13 +105,17 @@ def main() -> None:
     clean_session_files()
     print("   done")
 
-    print("\n3) Leave channels from tg-chanel-links.txt")
-    try:
-        left = asyncio.run(leave_all_channels())
-    except RuntimeError as exc:
-        print(f"   error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    print(f"\nDone. Left {left} channel(s).")
+    if args.leave_channels:
+        print("\n3) Leave channels from tg-chanel-links.csv")
+        try:
+            left = asyncio.run(leave_all_channels())
+        except RuntimeError as exc:
+            print(f"   error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+        print(f"\nDone. Left {left} channel(s).")
+    else:
+        print("\n3) Channel subscriptions kept (use --leave-channels to unsubscribe)")
+        print("\nDone.")
 
 
 if __name__ == "__main__":

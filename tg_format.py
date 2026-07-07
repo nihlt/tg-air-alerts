@@ -65,6 +65,48 @@ def post_url(channel: object, message_id: object) -> str:
     return f"https://t.me/{channel}/{message_id}"
 
 
+def post_link(post: dict[str, Any]) -> str:
+    channel_url = str(post.get("channel_url") or "").strip().rstrip("/")
+    message_id = post.get("message_id")
+    if channel_url and message_id is not None:
+        if "/c/" in channel_url:
+            match = re.match(r"^(https://t\.me/c/)(?:-100)?(\d+)$", channel_url)
+            if match:
+                return f"{match.group(1)}{match.group(2)}/{message_id}"
+        elif channel_url.startswith("https://t.me/"):
+            return f"{channel_url}/{message_id}"
+    channel = str(post.get("channel") or "").lstrip("@")
+    return post_url(channel, message_id)
+
+
+SUBSCRIBE_MARKERS = frozenset(
+    {
+        "подписаться",
+        "подписатся",
+        "підписатися",
+        "подпишись",
+        "труха",
+        "надіслати",
+        "макс",
+    }
+)
+
+
+def strip_subscribe_footer(text: str) -> str:
+    lines = text.splitlines()
+    while lines:
+        last = lines[-1].strip()
+        if not last:
+            lines.pop()
+            continue
+        normalized = normalize_for_search(last)
+        if any(marker in normalized for marker in SUBSCRIBE_MARKERS):
+            lines.pop()
+            continue
+        break
+    return "\n".join(lines).strip()
+
+
 def format_time_range(start_iso: str | None, end_iso: str | None) -> str:
     start = parse_event_time(start_iso)
     end = parse_event_time(end_iso)
@@ -89,9 +131,8 @@ def first_post_per_channel(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def format_channel_link(post: dict[str, Any]) -> str:
     channel = str(post.get("channel") or "")
-    message_id = post.get("message_id")
     return (
-        f'<a href="{escape_html(post_url(channel, message_id))}">'
+        f'<a href="{escape_html(post_link(post))}">'
         f"{escape_html(channel)}</a>"
     )
 
@@ -273,14 +314,15 @@ def format_event_text(
 
 
 def format_summary_text(post: dict[str, Any]) -> str:
-    text = str(post.get("text") or "").strip()
+    text = strip_subscribe_footer(str(post.get("text") or "").strip())
     channel = str(post.get("channel") or "")
-    message_id = post.get("message_id")
-    blocks = [escape_html(text)] if text else []
+    blocks: list[str] = []
     if channel:
         blocks.append(format_channel_link(post))
-    elif message_id:
-        blocks.append(escape_html(post_url(channel, message_id)))
+    if text:
+        blocks.append(escape_html(text))
+    elif not blocks and post.get("message_id"):
+        blocks.append(escape_html(post_link(post)))
     return "\n\n".join(blocks)
 
 

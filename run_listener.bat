@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-echo Cleanup before start...
+echo Cleanup before start (keep channel subscriptions)...
 python cleanup_listener.py
 if errorlevel 1 pause & exit /b 1
 

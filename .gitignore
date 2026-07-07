@@ -9,6 +9,7 @@ env/
 .env
 .env.*
 !.env.example
+tg_subscribers.json
 
 # Telegram client sessions
 telegram_session.txt

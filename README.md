@@ -20,7 +20,7 @@
 
 ```mermaid
 flowchart LR
-  channels[tg-chanel-links.txt] --> download[download_tg_posts.py]
+  channels[tg-chanel-links.csv] --> download[download_tg_posts.py]
   env[.env Telethon API] --> download
   download --> jsonl[exports/*.jsonl]
   download --> photos[exports/photos/]
@@ -47,7 +47,7 @@ tg-air-alerts/
 ├── download_tg_posts.py    # експорт постів з Telegram
 ├── build_news_html.py      # генерація HTML-стрічки + UI маркерів
 ├── build_news_markers.py   # автогенерація словника маркерів
-├── tg-chanel-links.txt     # список каналів (по одному URL на рядок)
+├── tg-chanel-links.csv     # список каналів зі ставленням до війни (CSV: url,stance)
 ├── tg-news-markers.json    # словник маркерів для підсвітки
 ├── MARKUP_GUIDE.md         # інструкція з розмітки (категорії Q/W/E/R)
 ├── .env.example            # шаблон конфігурації API
@@ -144,7 +144,7 @@ Copy-Item .env.example .env
 
 ### 1. Експорт постів
 
-Додайте канали в `tg-chanel-links.txt` (по одному `https://t.me/...` на рядок), потім:
+Додайте канали в `tg-chanel-links.csv` (у форматі `url,stance`, де `stance` — емодзі 🇺🇦 або 🐖), потім:
 
 ```powershell
 python download_tg_posts.py

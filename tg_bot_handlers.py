@@ -9,15 +9,26 @@ from typing import Any
 from tg_data import BASE_DIR
 from tg_rating import build_rating_keyboard, log_rating, parse_rating_callback
 from tg_send import TelegramBot
+from tg_subscribers import (
+    is_subscriber,
+    register_user,
+    toggle_forward_noise,
+)
 
 logger = logging.getLogger(__name__)
 
 LIVE_STATE_PATH = BASE_DIR / "exports" / "live_listener_state.json"
 
+WELCOME_TEXT = """<b>tg-air-alerts</b>
+
+Ви підписані на live-алерти.
+
+<b>Команди</b>
+<code>/toggle</code> — увімкнути/вимкнути шумні пости (неподії з каналів)"""
+
 
 @dataclass
 class LiveListenerState:
-    forward_noise: bool = False
     update_offset: int | None = None
 
     @classmethod
@@ -26,10 +37,7 @@ class LiveListenerState:
             return cls()
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            return cls(
-                forward_noise=bool(data.get("forward_noise", False)),
-                update_offset=data.get("update_offset"),
-            )
+            return cls(update_offset=data.get("update_offset"))
         except (json.JSONDecodeError, ValueError, TypeError):
             logger.warning("Invalid live listener state, starting fresh")
             return cls()
@@ -37,29 +45,20 @@ class LiveListenerState:
     def save(self, path: Path = LIVE_STATE_PATH) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            json.dumps(
-                {
-                    "forward_noise": self.forward_noise,
-                    "update_offset": self.update_offset,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+            json.dumps({"update_offset": self.update_offset}, ensure_ascii=False, indent=2)
             + "\n",
             encoding="utf-8",
         )
 
 
-def toggle_forward_noise(state: LiveListenerState) -> str:
-    state.forward_noise = not state.forward_noise
-    if state.forward_noise:
-        return "Шумні пости: надсилати"
-    return "Шумні пости: ігнорувати"
-
-
 def is_toggle_command(text: str) -> bool:
     normalized = text.strip().lower().split("@", 1)[0]
     return normalized in {"/toggle", "toggle"}
+
+
+def is_start_command(text: str) -> bool:
+    normalized = text.strip().lower().split("@", 1)[0]
+    return normalized in {"/start", "start"}
 
 
 def apply_rating_callback(
@@ -96,7 +95,6 @@ def process_live_bot_update(
     api_bot: TelegramBot,
     update: dict[str, Any],
     *,
-    author_chat_id: str,
     state: LiveListenerState,
 ) -> None:
     update_id = int(update.get("update_id", 0))
@@ -104,7 +102,7 @@ def process_live_bot_update(
 
     callback = update.get("callback_query")
     if callback:
-        _process_callback(api_bot, callback, author_chat_id=author_chat_id)
+        _process_callback(api_bot, callback)
         return
 
     message = update.get("message") or update.get("edited_message")
@@ -113,30 +111,36 @@ def process_live_bot_update(
 
     chat = message.get("chat") or {}
     chat_id = str(chat.get("id", ""))
-    if chat_id != str(author_chat_id):
-        return
+    from_user = message.get("from") or {}
+    username = from_user.get("username")
 
     text = message.get("text")
     if not text:
         return
 
+    if is_start_command(text):
+        register_user(chat_id, username)
+        api_bot.for_chat(chat_id).send_message(WELCOME_TEXT)
+        return
+
+    if not is_subscriber(chat_id):
+        return
+
     if is_toggle_command(text):
-        reply = toggle_forward_noise(state)
+        _, reply = toggle_forward_noise(chat_id)
         api_bot.for_chat(chat_id).send_message(reply)
 
 
 def _process_callback(
     api_bot: TelegramBot,
     callback: dict[str, Any],
-    *,
-    author_chat_id: str,
 ) -> None:
     callback_id = str(callback.get("id", ""))
     data = str(callback.get("data") or "")
     message = callback.get("message") or {}
     chat = message.get("chat") or {}
     chat_id = str(chat.get("id", ""))
-    if chat_id != str(author_chat_id):
+    if not is_subscriber(chat_id):
         api_bot.answer_callback_query(callback_id)
         return
 

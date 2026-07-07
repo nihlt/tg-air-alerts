@@ -144,6 +144,36 @@ MARKER_STYLES = """
       box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
       backdrop-filter: blur(10px);
     }
+    .stance-filters {
+      margin-top: 4px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .stance-filters h3 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #4b5563;
+      letter-spacing: 0.05em;
+    }
+    .stance-filters-group {
+      display: flex;
+      gap: 16px;
+    }
+    .stance-filter-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .stance-filter-label input {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
     .marker-panel-title {
       display: flex;
       flex-wrap: wrap;
@@ -831,6 +861,7 @@ def render_post(
     *,
     is_summary: bool = False,
     markers: list[dict[str, str]] | None = None,
+    stances: dict[str, str] | None = None,
 ) -> str:
     channel = escape(str(post.get("channel") or "unknown"))
     channel_url = escape(str(post.get("channel_url") or "#"), quote=True)
@@ -843,6 +874,14 @@ def render_post(
     message_id = escape(str(post.get("message_id") or "-"))
 
     text_block = f'<div class="message-text">{text_html}</div>' if text_html else ""
+
+    stance = ""
+    if stances:
+        clean_url = post.get("channel_url", "").rstrip("/")
+        for curl, cstance in stances.items():
+            if curl.rstrip("/") == clean_url:
+                stance = cstance
+                break
 
     event_attrs = ""
     event_classes = "message"
@@ -859,10 +898,16 @@ def render_post(
         )
         event_classes = "message message--grouped"
 
+    if stance:
+        event_attrs += f' data-stance="{stance}"'
+        channel_display = f"{channel} {stance}"
+    else:
+        channel_display = channel
+
     return f"""<article class="{event_classes}"{event_attrs}>
   <header class="message-header">
     <time>{date_kyiv}</time>
-    <a href="{channel_url}" target="_blank" rel="noopener noreferrer">{channel}</a>
+    <a href="{channel_url}" target="_blank" rel="noopener noreferrer">{channel_display}</a>
   </header>
   {text_block}
   {photo_html}
@@ -914,12 +959,41 @@ def render_events_panel(events: list[dict[str, Any]]) -> str:
     </section>"""
 
 
+def load_channel_stances() -> dict[str, str]:
+    csv_path = BASE_DIR / "tg-chanel-links.csv"
+    if not csv_path.exists():
+        return {}
+    import csv
+    stances = {}
+    try:
+        with csv_path.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header:
+                if not (header[0].startswith("http://") or header[0].startswith("https://")):
+                    pass
+                else:
+                    url = header[0].strip()
+                    stances[url] = header[1].strip() if len(header) > 1 else ""
+            for row in reader:
+                if not row:
+                    continue
+                url = row[0].strip()
+                if not url or url.startswith("#"):
+                    continue
+                stances[url] = row[1].strip() if len(row) > 1 else ""
+    except Exception:
+        pass
+    return stances
+
+
 def render_html(
     posts: list[dict[str, Any]],
     events: list[dict[str, Any]],
     assignment: dict[str, str],
     summary_posts: set[str],
 ) -> str:
+    stances = load_channel_stances()
     events_by_id = {str(event["id"]): event for event in events}
     seed_markers = normalize_markers(load_seed_markers())
     rendered_posts = "\n".join(
@@ -928,6 +1002,7 @@ def render_html(
             events_by_id.get(assignment.get(post_key(post), "")),
             is_summary=post_key(post) in summary_posts,
             markers=seed_markers,
+            stances=stances,
         )
         for post in posts
     )
@@ -1080,6 +1155,12 @@ def render_html(
       .message-header a {{
         color: #93c5fd;
       }}
+      .stance-filters {{
+        border-bottom-color: #374151;
+      }}
+      .stance-filters h3 {{
+        color: #9ca3af;
+      }}
     }}
     @media (max-width: 1200px) {{
       main {{
@@ -1117,6 +1198,19 @@ def render_html(
         <h2>Маркери</h2>
         <span class="marker-help">Виділіть текст: Q - локації, W - зброя, E - військова техніка, R - інше</span>
       </div>
+      <div class="stance-filters">
+        <h3>Позиція каналу</h3>
+        <div class="stance-filters-group">
+          <label class="stance-filter-label">
+            <input type="checkbox" id="filter-ua" checked>
+            🇺🇦 Проукраїнські
+          </label>
+          <label class="stance-filter-label">
+            <input type="checkbox" id="filter-ru" checked>
+            🐖 Проросійські
+          </label>
+        </div>
+      </div>
       <div class="marker-actions">
         <button class="marker-export" type="button" data-marker-export>Експорт тегів</button>
         <button class="marker-import" type="button" data-marker-import>Імпорт тегів</button>
@@ -1130,6 +1224,35 @@ def render_html(
     </section>
     {rendered_events}
   </main>
+  <script>
+    (() => {{
+      const filterUa = document.getElementById("filter-ua");
+      const filterRu = document.getElementById("filter-ru");
+      const messages = document.querySelectorAll(".message");
+
+      function updateFilters() {{
+        const showUa = filterUa.checked;
+        const showRu = filterRu.checked;
+
+        messages.forEach((msg) => {{
+          const stance = msg.getAttribute("data-stance");
+          let shouldShow = true;
+          if (stance === "🇺🇦") {{
+            shouldShow = showUa;
+          }} else if (stance === "🐖") {{
+            shouldShow = showRu;
+          }}
+          msg.style.display = shouldShow ? "" : "none";
+        }});
+      }}
+
+      if (filterUa && filterRu) {{
+        filterUa.addEventListener("change", updateFilters);
+        filterRu.addEventListener("change", updateFilters);
+        updateFilters();
+      }}
+    }})();
+  </script>
 {seed_markers_script}
 {MARKER_SCRIPT}
 {EVENT_SCRIPT}
