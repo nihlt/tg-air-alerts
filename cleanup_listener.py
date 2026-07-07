@@ -86,7 +86,7 @@ async def leave_all_channels() -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stop listener and clean lock files.")
     parser.add_argument(
-        "--leave-channels",
+        "--leave",
         action="store_true",
         help="Also unsubscribe from all channels in tg-chanel-links.csv",
     )
@@ -105,7 +105,7 @@ def main() -> None:
     clean_session_files()
     print("   done")
 
-    if args.leave_channels:
+    if args.leave:
         print("\n3) Leave channels from tg-chanel-links.csv")
         try:
             left = asyncio.run(leave_all_channels())
@@ -114,7 +114,7 @@ def main() -> None:
             raise SystemExit(1) from exc
         print(f"\nDone. Left {left} channel(s).")
     else:
-        print("\n3) Channel subscriptions kept (use --leave-channels to unsubscribe)")
+        print("\n3) Channel subscriptions kept (use --leave to unsubscribe)")
         print("\nDone.")
 
 

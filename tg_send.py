@@ -85,8 +85,10 @@ class TelegramBot:
                 headers={"Content-Type": "application/json"},
             )
 
+        import ssl
+        context = ssl._create_unverified_context()
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=60, context=context) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")

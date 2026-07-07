@@ -11,6 +11,7 @@ from tg_rating import build_rating_keyboard, log_rating, parse_rating_callback
 from tg_send import TelegramBot
 from tg_subscribers import (
     is_subscriber,
+    list_subscribers,
     register_user,
     toggle_forward_noise,
 )
@@ -24,7 +25,8 @@ WELCOME_TEXT = """<b>tg-air-alerts</b>
 Ви підписані на live-алерти.
 
 <b>Команди</b>
-<code>/toggle</code> — увімкнути/вимкнути шумні пости (неподії з каналів)"""
+<code>/toggle</code> — увімкнути/вимкнути шумні пости (неподії з каналів)
+<code>/status</code> — перевірити статус моніторингу"""
 
 
 @dataclass
@@ -59,6 +61,16 @@ def is_toggle_command(text: str) -> bool:
 def is_start_command(text: str) -> bool:
     normalized = text.strip().lower().split("@", 1)[0]
     return normalized in {"/start", "start"}
+
+
+def is_help_command(text: str) -> bool:
+    normalized = text.strip().lower().split("@", 1)[0]
+    return normalized in {"/help", "help"}
+
+
+def is_status_command(text: str) -> bool:
+    normalized = text.strip().lower().split("@", 1)[0]
+    return normalized in {"/status", "status"}
 
 
 def apply_rating_callback(
@@ -118,12 +130,30 @@ def process_live_bot_update(
     if not text:
         return
 
-    if is_start_command(text):
+    if is_start_command(text) or is_help_command(text):
         register_user(chat_id, username)
         api_bot.for_chat(chat_id).send_message(WELCOME_TEXT)
         return
 
     if not is_subscriber(chat_id):
+        return
+
+    if is_status_command(text):
+        from tg_telethon_io import load_channels
+
+        try:
+            channels_count = len(load_channels())
+        except Exception:
+            channels_count = 0
+        subscriber = next((sub for sub in list_subscribers() if sub.chat_id == chat_id), None)
+        noise_mode = "надсилати" if subscriber and subscriber.forward_noise else "ігнорувати"
+        reply = (
+            "<b>Статус моніторингу:</b>\n"
+            f"• Активних каналів: <b>{channels_count}</b>\n"
+            f"• Пересилання шумних постів: <b>{noise_mode}</b>\n"
+            "• Система активна та слухає ефір."
+        )
+        api_bot.for_chat(chat_id).send_message(reply)
         return
 
     if is_toggle_command(text):
