@@ -243,7 +243,7 @@ class LiveChannelListener:
                         process_live_bot_update,
                         self.api_bot,
                         update,
-                        author_chat_id=self.author_chat_id,
+                        bot=self.bot,
                         state=self.state,
                     )
                     self.state.save()

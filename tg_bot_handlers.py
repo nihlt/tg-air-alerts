@@ -92,11 +92,32 @@ def apply_rating_callback(
     return "Збережено"
 
 
+def _update_env_author_id(numeric_id: str) -> None:
+    import re
+    from tg_data import BASE_DIR
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+    try:
+        content = env_path.read_text(encoding="utf-8")
+        new_content, count = re.subn(
+            r'^((?:TELEGRAM_AUTHOR|telegram_user_id)\s*=\s*).*$',
+            f'\\g<1>{numeric_id}',
+            content,
+            flags=re.MULTILINE | re.IGNORECASE
+        )
+        if count > 0:
+            env_path.write_text(new_content, encoding="utf-8")
+            logger.info("Automatically updated TELEGRAM_AUTHOR to numeric ID: %s in .env", numeric_id)
+    except Exception as exc:
+        logger.warning("Could not automatically update .env file: %s", exc)
+
+
 def process_live_bot_update(
     api_bot: TelegramBot,
     update: dict[str, Any],
     *,
-    author_chat_id: str,
+    bot: TelegramBot,
     state: LiveListenerState,
 ) -> None:
     update_id = int(update.get("update_id", 0))
@@ -104,7 +125,7 @@ def process_live_bot_update(
 
     callback = update.get("callback_query")
     if callback:
-        _process_callback(api_bot, callback, author_chat_id=author_chat_id)
+        _process_callback(api_bot, callback, bot=bot)
         return
 
     message = update.get("message") or update.get("edited_message")
@@ -113,7 +134,24 @@ def process_live_bot_update(
 
     chat = message.get("chat") or {}
     chat_id = str(chat.get("id", ""))
-    if chat_id != str(author_chat_id):
+    
+    from_user = message.get("from") or {}
+    username = from_user.get("username") or ""
+    
+    author_chat_id = str(bot.chat_id)
+    is_author = False
+    
+    if author_chat_id.replace("-", "").isdigit():
+        if chat_id == author_chat_id:
+            is_author = True
+    else:
+        if username.lower() == author_chat_id.lower().strip("@"):
+            is_author = True
+            bot.chat_id = chat_id
+            api_bot.chat_id = chat_id
+            _update_env_author_id(chat_id)
+
+    if not is_author:
         return
 
     text = message.get("text")
@@ -157,14 +195,16 @@ def _process_callback(
     api_bot: TelegramBot,
     callback: dict[str, Any],
     *,
-    author_chat_id: str,
+    bot: TelegramBot,
 ) -> None:
     callback_id = str(callback.get("id", ""))
     data = str(callback.get("data") or "")
     message = callback.get("message") or {}
     chat = message.get("chat") or {}
     chat_id = str(chat.get("id", ""))
-    if chat_id != str(author_chat_id):
+    
+    author_chat_id = str(bot.chat_id)
+    if chat_id != author_chat_id:
         api_bot.answer_callback_query(callback_id)
         return
 
