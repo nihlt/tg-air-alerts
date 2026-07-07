@@ -1,0 +1,31 @@
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+tg_subscribers.json
+
+# Telegram client sessions
+telegram_session.txt
+telegram_export.session*
+*.session*
+
+# Generated exports
+exports/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local docs and work logs (not versioned)
+docs/
+!docs/LIVE_LISTENER.md
+!docs/TG_ALERTS_PLAN.md
