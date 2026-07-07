@@ -1,7 +1,7 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-echo "Cleanup before start..."
+echo "Cleanup before start (keep channel subscriptions)..."
 python3 cleanup_listener.py
 if [ $? -ne 0 ]; then
     echo "Cleanup failed. Exiting."

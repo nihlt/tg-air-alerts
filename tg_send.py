@@ -14,8 +14,9 @@ from typing import Any
 from dotenv import dotenv_values
 
 from tg_data import BASE_DIR, enrich_event_posts, enrich_post
-from tg_format import format_event_text, format_summary_text
+from tg_format import first_post_per_channel, format_event_text, format_summary_text
 from tg_data import TimelineItem
+from tg_subscribers import Subscriber
 
 ENV_PATH = BASE_DIR / ".env"
 SEND_PAUSE_SECONDS = 0.4
@@ -239,7 +240,7 @@ def collect_photos(
     enriched_posts: list[dict[str, Any]],
     base_dir: Path = BASE_DIR,
 ) -> list[dict[str, Any]]:
-    photos: list[dict[str, Any]] = []
+    posts_with_photos: list[dict[str, Any]] = []
     for post in enriched_posts:
         photo_path = post.get("photo_path")
         if not photo_path:
@@ -248,6 +249,14 @@ def collect_photos(
         if not absolute_path.exists():
             logger.warning("Missing photo file: %s", absolute_path)
             continue
+        posts_with_photos.append(post)
+
+    photos: list[dict[str, Any]] = []
+    for post in posts_with_photos:
+        photo_path = post.get("photo_path")
+        if not photo_path:
+            continue
+        absolute_path = base_dir / str(photo_path)
         photos.append(
             {
                 "path": absolute_path,
@@ -302,6 +311,17 @@ def send_photos_for_posts(
             bot.send_photo(photo_items[0].path)
         else:
             bot.send_media_group(photo_items)
+        _pause()
+
+
+def broadcast_alert(
+    token: str,
+    subscribers: list[Subscriber],
+    send_fn,
+) -> None:
+    for sub in subscribers:
+        bot = TelegramBot(token, sub.chat_id)
+        send_fn(bot)
         _pause()
 
 

@@ -14,7 +14,7 @@ from telethon.sessions import StringSession
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
-CHANNELS_PATH = BASE_DIR / "tg-chanel-links.txt"
+CHANNELS_PATH = BASE_DIR / "tg-chanel-links.csv"
 EXPORTS_DIR = BASE_DIR / "exports"
 PHOTOS_DIR = EXPORTS_DIR / "photos"
 LIVE_JSONL_PATH = EXPORTS_DIR / "tg_posts_live.jsonl"
@@ -98,20 +98,61 @@ async def create_telegram_client() -> TelegramClient:
     return client
 
 
+def load_channel_stances() -> dict[str, str]:
+    if not CHANNELS_PATH.exists():
+        return {}
+    import csv
+    stances = {}
+    try:
+        with CHANNELS_PATH.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header:
+                if not (header[0].startswith("http://") or header[0].startswith("https://")):
+                    pass
+                else:
+                    url = header[0].strip()
+                    stances[url] = header[1].strip() if len(header) > 1 else ""
+            for row in reader:
+                if not row:
+                    continue
+                url = row[0].strip()
+                if not url or url.startswith("#"):
+                    continue
+                stances[url] = row[1].strip() if len(row) > 1 else ""
+    except Exception as exc:
+        print(f"[warn] Failed to load channel stances: {exc}", file=sys.stderr)
+    return stances
+
+
 def load_channels() -> list[str]:
     if not CHANNELS_PATH.exists():
         raise RuntimeError(f"Channels file not found: {CHANNELS_PATH}")
 
+    import csv
     seen: set[str] = set()
     channels: list[str] = []
-    for line in CHANNELS_PATH.read_text(encoding="utf-8").splitlines():
-        url = line.strip()
-        if not url or url.startswith("#"):
-            continue
-        if url in seen:
-            continue
-        seen.add(url)
-        channels.append(url)
+    with CHANNELS_PATH.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        header = next(reader, None)
+        if header:
+            if not (header[0].startswith("http://") or header[0].startswith("https://")):
+                pass
+            else:
+                url = header[0].strip()
+                if url and url not in seen:
+                    seen.add(url)
+                    channels.append(url)
+        for row in reader:
+            if not row:
+                continue
+            url = row[0].strip()
+            if not url or url.startswith("#"):
+                continue
+            if url in seen:
+                continue
+            seen.add(url)
+            channels.append(url)
 
     if not channels:
         raise RuntimeError(f"No channels found in {CHANNELS_PATH}")
@@ -140,7 +181,15 @@ def message_to_record(
     message_date_utc = message.date.astimezone(timezone.utc)
     replies = getattr(message, "replies", None)
     if channel_name is None:
-        channel_name = getattr(message.chat, "username", None) or getattr(message.chat, "title", None)
+        chat_username = getattr(message.chat, "username", None)
+        if chat_username:
+            channel_name = chat_username
+        else:
+            url_segment = channel_url.rstrip("/").split("/")[-1]
+            if url_segment and not url_segment.startswith("+") and not url_segment.startswith("joinchat"):
+                channel_name = url_segment
+            else:
+                channel_name = getattr(message.chat, "title", None) or "unknown"
 
     return {
         "channel": channel_name,

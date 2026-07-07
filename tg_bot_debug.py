@@ -81,6 +81,11 @@ GOTO_RE = re.compile(r"^/goto(?:@\w+)?\s+(?P<target>.+)$", re.IGNORECASE)
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 class DebugSession:
     def __init__(
